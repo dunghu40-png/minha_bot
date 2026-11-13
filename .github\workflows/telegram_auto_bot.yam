@@ -1,1 +1,56 @@
+name: GoldVision AI - 24/7 Telegram Auto-Signal Bot
 
+on:
+  schedule:
+    # Tự động chạy mỗi 15 phút (24/7 trên đám mây GitHub kể cả khi tắt máy tính)
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      symbol:
+        description: 'Cặp Vàng cần phân tích (PAXG/USDT, XAUT/USDT, XAU/USD)'
+        required: false
+        default: 'PAXG/USDT'
+      timeframe:
+        description: 'Khung thời gian (5m, 15m, 1h, 4h, 1d)'
+        required: false
+        default: '1h'
+      force_send:
+        description: 'Bắt buộc gửi ngay (bỏ qua lọc trùng kèo)? (true / false)'
+        required: false
+        default: 'true'
+
+jobs:
+  analyze_and_send_telegram:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 1. Checkout mã nguồn
+        uses: actions/checkout@v4
+
+      - name: 2. Cài đặt Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 3. Khôi phục bộ nhớ trạng thái kèo đã gửi (Chống spam trùng lặp)
+        uses: actions/cache@v4
+        with:
+          path: .last_telegram_signal.json
+          key: telegram-signal-state-${{ github.run_id }}
+          restore-keys: |
+            telegram-signal-state-
+
+      - name: 4. Cài đặt thư viện phân tích & vẽ biểu đồ
+        run: pip install -r requirements.txt
+
+      - name: 5. Phân tích 7 Trụ Cột SMC/ICT & Tự động bắn Ảnh Chart về Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GOLD_SYMBOL: ${{ github.event.inputs.symbol || 'PAXG/USDT' }}
+          GOLD_TIMEFRAME: ${{ github.event.inputs.timeframe || '1h' }}
+          MIN_CONFIDENCE: '70'
+          FORCE_SEND: ${{ github.event.inputs.force_send || 'false' }}
+        run: python telegram_cloud_bot.py
