@@ -2,16 +2,16 @@ name: GoldVision AI - 24/7 Telegram Auto-Signal Bot
 
 on:
   schedule:
-    # 1. Đầu mỗi giờ Phiên Âu - Mỹ (19:02 tối -> 04:02 sáng giờ VN = 12:02 -> 21:02 UTC):
+    # 1. Đầu mỗi giờ Phiên Âu - Mỹ (19:03 tối -> 04:03 sáng giờ VN = 12:03 -> 21:03 UTC):
     #    Luôn gửi 1 ảnh chart cập nhật tình hình đóng nến 1h (kể cả khi đang WAIT)
-    - cron: '2 12-21 * * *'
-    # 2. Giờ vàng Phiên Âu - Mỹ (19:17 tối -> 03:47 sáng giờ VN = 12:17 -> 20:47 UTC):
-    #    Kết hợp với phút :02 ở trên thành đúng 15 phút/lần (:02, :17, :32, :47), nới lọc >= 65%
-    - cron: '17,32,47 12-20 * * *'
-    # 3. Ngoài giờ cao điểm (04:32 sáng -> 18:32 tối giờ VN):
-    #    Quét nhẹ 30 phút/lần, giữ lọc chặt >= 70% để tránh nhiễu phiên Á
-    - cron: '32 21 * * *'
-    - cron: '2,32 0-11,22-23 * * *'
+    - cron: '3 12-21 * * *'
+    # 2. Giờ vàng Phiên Âu - Mỹ (19:18 tối -> 03:48 sáng giờ VN = 12:18 -> 20:48 UTC):
+    #    Ghép với phút :03 thành bộ số phong thủy (:03, :18, :33, :48 - 15 phút/lần), nới lọc >= 65%
+    - cron: '18,33,48 12-20 * * *'
+    # 3. Ngoài giờ cao điểm (04:33 sáng -> 18:33 tối giờ VN):
+    #    Quét nhẹ 30 phút/lần (:03 và :33), giữ lọc chặt >= 70% để tránh nhiễu phiên Á
+    - cron: '33 21 * * *'
+    - cron: '3,33 0-11,22-23 * * *'
   workflow_dispatch:
     inputs:
       symbol:
@@ -71,16 +71,16 @@ jobs:
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             export MIN_CONFIDENCE="70"
             export FORCE_SEND="${INPUT_FORCE_SEND:-false}"
-          elif [ "$SCHEDULE_EXPR" = "2 12-21 * * *" ]; then
-            # Bản tin chốt nến đầu mỗi giờ Phiên Âu - Mỹ (19:02 tối -> 04:02 sáng VN)
+          elif [ "$SCHEDULE_EXPR" = "3 12-21 * * *" ]; then
+            # Bản tin chốt nến đầu mỗi giờ Phiên Âu - Mỹ (19:03 tối -> 04:03 sáng VN)
             export MIN_CONFIDENCE="65"
             export FORCE_SEND="true"
-          elif [ "$SCHEDULE_EXPR" = "17,32,47 12-20 * * *" ]; then
-            # Quét săn kèo mỗi 15 phút giữa giờ trong Phiên Âu - Mỹ (:17, :32, :47 từ 19:17 -> 03:47 VN)
+          elif [ "$SCHEDULE_EXPR" = "18,33,48 12-20 * * *" ]; then
+            # Quét săn kèo mỗi 15 phút giữa giờ trong Phiên Âu - Mỹ (:18, :33, :48 từ 19:18 -> 03:48 VN)
             export MIN_CONFIDENCE="65"
             export FORCE_SEND="false"
           else
-            # Ngoài giờ cao điểm (04:32 sáng -> 18:32 tối VN): chỉ báo kèo đẹp >= 70%
+            # Ngoài giờ cao điểm (04:33 sáng -> 18:33 tối VN): chỉ báo kèo đẹp >= 70%
             export MIN_CONFIDENCE="70"
             export FORCE_SEND="false"
           fi
