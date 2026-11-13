@@ -5,9 +5,9 @@ on:
     # 1. Đầu mỗi giờ Phiên Âu - Mỹ (19:02 tối -> 04:02 sáng giờ VN = 12:02 -> 21:02 UTC):
     #    Luôn gửi 1 ảnh chart cập nhật tình hình đóng nến 1h (kể cả khi đang WAIT)
     - cron: '2 12-21 * * *'
-    # 2. Giờ vàng Phiên Âu - Mỹ (19:07 tối -> 03:57 sáng giờ VN = 12:07 -> 20:57 UTC):
-    #    Quét dày mỗi 5 phút (mức tối đa GitHub cho phép), nới lọc >= 65% để bắn kèo nhanh
-    - cron: '7,12,17,22,27,32,37,42,47,52,57 12-20 * * *'
+    # 2. Giờ vàng Phiên Âu - Mỹ (19:17 tối -> 03:47 sáng giờ VN = 12:17 -> 20:47 UTC):
+    #    Kết hợp với phút :02 ở trên thành đúng 15 phút/lần (:02, :17, :32, :47), nới lọc >= 65%
+    - cron: '17,32,47 12-20 * * *'
     # 3. Ngoài giờ cao điểm (04:32 sáng -> 18:32 tối giờ VN):
     #    Quét nhẹ 30 phút/lần, giữ lọc chặt >= 70% để tránh nhiễu phiên Á
     - cron: '32 21 * * *'
@@ -75,8 +75,8 @@ jobs:
             # Bản tin chốt nến đầu mỗi giờ Phiên Âu - Mỹ (19:02 tối -> 04:02 sáng VN)
             export MIN_CONFIDENCE="65"
             export FORCE_SEND="true"
-          elif [ "$SCHEDULE_EXPR" = "7,12,17,22,27,32,37,42,47,52,57 12-20 * * *" ]; then
-            # Quét săn kèo mỗi 5 phút giữa giờ trong Phiên Âu - Mỹ (19:07 tối -> 03:57 sáng VN)
+          elif [ "$SCHEDULE_EXPR" = "17,32,47 12-20 * * *" ]; then
+            # Quét săn kèo mỗi 15 phút giữa giờ trong Phiên Âu - Mỹ (:17, :32, :47 từ 19:17 -> 03:47 VN)
             export MIN_CONFIDENCE="65"
             export FORCE_SEND="false"
           else
