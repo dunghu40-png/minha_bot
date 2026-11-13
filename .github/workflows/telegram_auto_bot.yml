@@ -2,8 +2,16 @@ name: GoldVision AI - 24/7 Telegram Auto-Signal Bot
 
 on:
   schedule:
-    # Tự động chạy mỗi 15 phút (24/7 trên đám mây GitHub kể cả khi tắt máy tính)
-    - cron: '*/15 * * * *'
+    # 1. Đầu mỗi giờ Phiên Âu - Mỹ (19:02 tối -> 04:02 sáng giờ VN = 12:02 -> 21:02 UTC):
+    #    Luôn gửi 1 ảnh chart cập nhật tình hình đóng nến 1h (kể cả khi đang WAIT)
+    - cron: '2 12-21 * * *'
+    # 2. Giờ vàng Phiên Âu - Mỹ (19:07 tối -> 03:57 sáng giờ VN = 12:07 -> 20:57 UTC):
+    #    Quét dày mỗi 5 phút (mức tối đa GitHub cho phép), nới lọc >= 65% để bắn kèo nhanh
+    - cron: '7,12,17,22,27,32,37,42,47,52,57 12-20 * * *'
+    # 3. Ngoài giờ cao điểm (04:32 sáng -> 18:32 tối giờ VN):
+    #    Quét nhẹ 30 phút/lần, giữ lọc chặt >= 70% để tránh nhiễu phiên Á
+    - cron: '32 21 * * *'
+    - cron: '2,32 0-11,22-23 * * *'
   workflow_dispatch:
     inputs:
       symbol:
@@ -18,6 +26,11 @@ on:
         description: 'Bắt buộc gửi ngay (bỏ qua lọc trùng kèo)? (true / false)'
         required: false
         default: 'true'
+
+# Đảm bảo các lượt chạy không đè lên nhau làm trùng tin nhắn hay hỏng cache chống spam
+concurrency:
+  group: goldvision-telegram-bot
+  cancel-in-progress: false
 
 jobs:
   analyze_and_send_telegram:
@@ -51,7 +64,25 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GOLD_SYMBOL: ${{ github.event.inputs.symbol || 'PAXG/USDT' }}
           GOLD_TIMEFRAME: ${{ github.event.inputs.timeframe || '1h' }}
-          MIN_CONFIDENCE: '70'
-          FORCE_SEND: ${{ github.event.inputs.force_send || 'false' }}
-        run: python telegram_cloud_bot.py
-
+          EVENT_NAME: ${{ github.event_name }}
+          SCHEDULE_EXPR: ${{ github.event.schedule }}
+          INPUT_FORCE_SEND: ${{ github.event.inputs.force_send }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            export MIN_CONFIDENCE="70"
+            export FORCE_SEND="${INPUT_FORCE_SEND:-false}"
+          elif [ "$SCHEDULE_EXPR" = "2 12-21 * * *" ]; then
+            # Bản tin chốt nến đầu mỗi giờ Phiên Âu - Mỹ (19:02 tối -> 04:02 sáng VN)
+            export MIN_CONFIDENCE="65"
+            export FORCE_SEND="true"
+          elif [ "$SCHEDULE_EXPR" = "7,12,17,22,27,32,37,42,47,52,57 12-20 * * *" ]; then
+            # Quét săn kèo mỗi 5 phút giữa giờ trong Phiên Âu - Mỹ (19:07 tối -> 03:57 sáng VN)
+            export MIN_CONFIDENCE="65"
+            export FORCE_SEND="false"
+          else
+            # Ngoài giờ cao điểm (04:32 sáng -> 18:32 tối VN): chỉ báo kèo đẹp >= 70%
+            export MIN_CONFIDENCE="70"
+            export FORCE_SEND="false"
+          fi
+          echo "Trigger: $EVENT_NAME ($SCHEDULE_EXPR) | MIN_CONFIDENCE=$MIN_CONFIDENCE | FORCE_SEND=$FORCE_SEND"
+          python telegram_cloud_bot.py
