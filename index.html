@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GoldVision AI (GitHub Edition) - Phân Tích XAUUSD & Vàng Số + Tự Động Bắn Telegram</title>
+  <link rel="stylesheet" href="style.css?v=6.5">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- Top Header -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="logo-area">
+        <div class="logo-icon">🪙</div>
+        <div class="logo-text">
+          <h1>GoldVision AI <span class="pro-tag">GITHUB FREE • TELEGRAM BOT</span></h1>
+          <p>Phân Tích 7 Trụ Cột SMC/ICT Trực Tiếp Trên Trình Duyệt & Tự Động Bắn Tín Hiệu + Ảnh Chart Về Telegram</p>
+        </div>
+        <div class="market-status-pill">
+          <span class="status-dot"></span>
+          <span id="nyClockLabel">NY TIME LIVE</span>
+        </div>
+      </div>
+
+      <!-- Controls: Symbols, Timeframes, Analyze -->
+      <div class="control-bar">
+        <div class="selector-group" id="symbolSelector">
+          <button class="select-pill active" data-symbol="PAXG/USDT">🪙 PAXG/USDT</button>
+          <button class="select-pill" data-symbol="XAUT/USDT">🥇 XAUT/USDT</button>
+          <button class="select-pill" data-symbol="XAU/USD">🏆 XAU/USD</button>
+        </div>
+
+        <div class="selector-group" id="tfSelector">
+          <button class="select-pill" data-tf="5m">M5</button>
+          <button class="select-pill" data-tf="15m">M15</button>
+          <button class="select-pill active" data-tf="1h">H1</button>
+          <button class="select-pill" data-tf="4h">H4</button>
+          <button class="select-pill" data-tf="1d">D1</button>
+          <button class="select-pill" data-tf="1w">1W</button>
+        </div>
+
+        <button class="btn-analyze" id="btnAnalyze">
+          <span>⚡ PHÂN TÍCH ĐA TẦNG</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main 4-Area Workspace -->
+  <main class="main-layout">
+
+    <!-- LEFT WORKSPACE: AREA 1 (MAIN CHART + 3 MODES + 8 LAYERS + DETAIL INSPECTOR) & AREA 3 DEEP ANALYSIS -->
+    <section class="left-section">
+
+      <!-- AREA 1: MAIN CHART CARD -->
+      <div class="card chart-viewer-card">
+
+        <!-- 3 Display Modes Bar -->
+        <div class="modes-bar">
+          <div class="modes-left">
+            <span class="modes-label">CHẾ ĐỘ HIỂN THỊ:</span>
+            <div class="mode-btn-group" id="modeSelector">
+              <button class="mode-btn active" data-mode="clean">
+                <span class="mode-num">CHẾ ĐỘ 1</span>
+                <span class="mode-name">Clean Chart (Mặc định)</span>
+              </button>
+              <button class="mode-btn" data-mode="smc">
+                <span class="mode-num">CHẾ ĐỘ 2</span>
+                <span class="mode-name">SMC Analysis</span>
+              </button>
+              <button class="mode-btn" data-mode="full">
+                <span class="mode-num">CHẾ ĐỘ 3</span>
+                <span class="mode-name">Full Analysis</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="chart-view-switch">
+            <button class="btn-icon" id="btnZoomIn" title="Phóng to nến (hoặc lăn chuột lên)">➕ Zoom</button>
+            <button class="btn-icon" id="btnZoomOut" title="Thu nhỏ nến (hoặc lăn chuột xuống)">➖ Thu nhỏ</button>
+            <button class="btn-icon" id="btnResetView" title="Đặt lại khung nhìn chuẩn (hoặc Double-click lên chart)">⟲ Reset Chart</button>
+            <button class="btn-icon active-projection" id="btnToggleRoadmap" title="Bật/tắt đường đi giá dự phóng tương lai (BOS / CHoCH)">🔮 Dự Phóng BOS/CHoCH</button>
+            <button class="view-tab active" id="tabInteractiveCanvas">🎯 Tương Tác (TradingView Pan/Zoom)</button>
+            <button class="btn-icon btn-icon-gold" id="btnDownloadChart" title="Tải ảnh biểu đồ HD">📥 Tải PNG</button>
+            <button class="btn-icon" id="btnSendTelegramQuick" style="background:rgba(2,132,199,0.25);border-color:#38bdf8;color:#e0f2fe;" title="Gửi Ảnh Chart & Tín hiệu về Telegram ngay">✈️ Bắn Telegram</button>
+            <button class="btn-icon" id="btnCopySignal" title="Sao chép kịch bản">📋 Copy</button>
+          </div>
+        </div>
+
+        <!-- 8 Interactive Chart Layers Bar -->
+        <div class="layers-panel">
+          <div class="layers-header">
+            <div class="layers-title-wrap">
+              <span class="layers-title">🎛️ CÁC LỚP HIỂN THỊ (CHART LAYERS)</span>
+              <span class="layers-counter" id="layersCounter">Đang bật 2/8 lớp</span>
+            </div>
+            <div class="layers-quick-actions">
+              <button class="btn-layer-action" id="btnToggleAnnotations">👁️ Ẩn toàn bộ annotation</button>
+              <button class="btn-layer-action" id="btnClearLayers">✕ Tắt tất cả</button>
+            </div>
+          </div>
+
+          <div class="layers-grid" id="layersGrid">
+            <button class="layer-chip active" data-layer="structure">
+              <span class="layer-dot" style="background:#38bdf8;"></span>
+              <div class="layer-info">
+                <strong>Market Structure</strong>
+                <small>HH/HL/LH/LL, BOS, CHOCH, MSS</small>
+              </div>
+            </button>
+
+            <button class="layer-chip" data-layer="liquidity">
+              <span class="layer-dot" style="background:#00ffcc;"></span>
+              <div class="layer-info">
+                <strong>Liquidity</strong>
+                <small>EQH/EQL, BSL, SSL, Sweep, IDM</small>
+              </div>
+            </button>
+
+            <button class="layer-chip" data-layer="order_blocks">
+              <span class="layer-dot" style="background:#00e676;"></span>
+              <div class="layer-info">
+                <strong>Order Blocks</strong>
+                <small>Bullish OB, Bearish OB, Breaker</small>
+              </div>
+            </button>
+
+            <button class="layer-chip" data-layer="imbalance">
+              <span class="layer-dot" style="background:#ff9800;"></span>
+              <div class="layer-info">
+                <strong>Imbalance</strong>
+                <small>FVG, IFVG, BPR</small>
+              </div>
+            </button>
+
+            <button class="layer-chip active" data-layer="supply_demand">
+              <span class="layer-dot" style="background:#10b981;"></span>
+              <div class="layer-info">
+                <strong>Supply & Demand</strong>
+                <small>Demand (DBR/RBR), Supply (RBD/DBD)</small>
+              </div>
+            </button>
+
+            <button class="layer-chip" data-layer="ict">
+              <span class="layer-dot" style="background:#fbbf24;"></span>
+              <div class="layer-info">
+                <strong>ICT Concepts</strong>
+                <small>OTE, AMD, Killzones, Silver Bullet</small>
+              </div>
+            </button>
+
+            <button class="layer-chip" data-layer="price_action">
+              <span class="layer-dot" style="background:#fde047;"></span>
+              <div class="layer-info">
+                <strong>Price Action</strong>
+                <small>Engulfing, Pin Bar, Inside/Outside</small>
+              </div>
+            </button>
+
+            <button class="layer-chip" data-layer="indicators">
+              <span class="layer-dot" style="background:#a855f7;"></span>
+              <div class="layer-info">
+                <strong>Indicators & Vol Profile</strong>
+                <small>EMA 20/50/200, VWAP, BB, POC/VAH/VAL</small>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Main Chart Viewport -->
+        <div class="chart-display-container" id="chartDisplayContainer">
+          <div class="chart-loading-overlay" id="loadingOverlay" style="display: none;">
+            <div class="spinner"></div>
+            <p style="color: #38bdf8; font-weight: 600; font-size: 0.95rem;">
+              Đang lấy dữ liệu Live (Binance / Bybit / OKX) & Phân tích 7 trụ cột SMC/ICT...
+            </p>
+          </div>
+
+          <!-- Interactive HTML5 Canvas -->
+          <div id="interactiveCanvasWrap" class="interactive-canvas-wrap">
+            <canvas id="smcChartCanvas" width="1150" height="580"></canvas>
+            <div class="canvas-hint-bar">
+              <span>🖱️ <strong>Điều khiển như TradingView:</strong> <strong>Lăn chuột</strong> để Zoom to/nhỏ • <strong>Giữ chuột trái kéo</strong> để dịch chuyển nến & giá • <strong>Kéo cột giá bên phải</strong> để co giãn trục Y • <strong>Double-click</strong> để Reset • <strong>Click vùng OB/FVG/BOS/Sweep</strong> để xem chuỗi sự kiện!</span>
+            </div>
+          </div>
+
+          <img id="annotatedChartImage" class="annotated-chart-img" src="" alt="Biểu đồ phân tích HD" style="display: none;">
+        </div>
+
+        <!-- Click-to-Inspect Detail View Bar -->
+        <div class="inspect-detail-bar" id="inspectDetailBar">
+          <div class="inspect-badge" id="inspectCategoryBadge">🔍 CHI TIẾT VÙNG / SỰ KIỆN (CLICK-TO-INSPECT)</div>
+          <div class="inspect-content">
+            <strong id="inspectTitle">Chọn một vùng OB, FVG, Supply/Demand hoặc sự kiện BOS/MSS/Sweep trên biểu đồ</strong>
+            <p id="inspectDesc">Hệ thống liên kết nhân quả (Causal Event Chain) sẽ giải thích vùng này được tạo ra bởi cú Displacement nào, phá qua Swing nào và xảy ra sau cú Liquidity Sweep nào.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- AREA 3 (DEEP ANALYSIS TABS): ICT TIME & LIQUIDITY • VOLUME PROFILE • CAUSAL EVENT CHAIN -->
+      <div class="card deep-analysis-card">
+        <div class="card-header">
+          <div class="card-title">
+            <span>🧬 TÁI DỰNG DIỄN BIẾN THỊ TRƯỜNG: ICT TIME • VOLUME PROFILE • CHUỖI SỰ KIỆN NHÂN QUẢ</span>
+          </div>
+          <span class="badge badge-gold" id="activeModelHeaderBadge">SMC + ICT ENGINE</span>
+        </div>
+
+        <div class="deep-pillars-grid">
+          <div class="pillar-box">
+            <div class="pillar-title">🕒 ICT TIME & LIQUIDITY (NY DST)</div>
+            <div class="kv-list">
+              <div class="kv-row"><span>Giờ New York:</span><strong id="ictNyTime">--:--</strong></div>
+              <div class="kv-row"><span>Killzone:</span><strong id="ictKillzone" class="text-cyan">Đang kiểm tra</strong></div>
+              <div class="kv-row"><span>Silver Bullet:</span><strong id="ictSilverBullet">Chờ khung giờ</strong></div>
+              <div class="kv-row"><span>PDH / PDL (Ngày trước):</span><strong id="ictPdhPdl">-- / --</strong></div>
+              <div class="kv-row"><span>PWH / PWL (Tuần trước):</span><strong id="ictPwhPwl">-- / --</strong></div>
+              <div class="kv-row"><span>Asian Range:</span><strong id="ictAsianRange">-- / --</strong></div>
+              <div class="kv-row"><span>Pha AMD (Power of 3):</span><strong id="ictAmdPhase" class="text-gold">Accumulation</strong></div>
+            </div>
+            <div class="judas-alert" id="ictJudasAlert">Đang theo dõi tín hiệu Judas Swing đầu phiên...</div>
+          </div>
+
+          <div class="pillar-box">
+            <div class="pillar-title">📊 QUANTITATIVE & VOLUME PROFILE</div>
+            <div class="kv-list">
+              <div class="kv-row"><span>POC (Point of Control):</span><strong id="vpPoc" class="text-gold">--</strong></div>
+              <div class="kv-row"><span>VAH / VAL (70% Value Area):</span><strong id="vpVahVal">-- / --</strong></div>
+              <div class="kv-row"><span>VWAP / StdDev:</span><strong id="quantVwapStd">-- / --</strong></div>
+              <div class="kv-row"><span>ATR (14) / ADX (14):</span><strong id="quantAtrAdx">-- / --</strong></div>
+              <div class="kv-row"><span>RSI (14) / RVOL:</span><strong id="quantRsiRvol">-- / --</strong></div>
+              <div class="kv-row"><span>Order Flow Delta:</span><strong id="quantDeltaVal" class="text-green">--</strong></div>
+              <div class="kv-row"><span>Sổ lệnh Live (Depth):</span><strong id="quantObWall">--</strong></div>
+            </div>
+            <div class="vol-source-note" id="volSourceNote">
+              Phân biệt rõ Volume khớp lệnh tập trung (PAXG/XAUT) và Tick Volume của Broker CFD (XAUUSD).
+            </div>
+          </div>
+
+          <div class="pillar-box">
+            <div class="pillar-title">🔗 CHUỖI SỰ KIỆN NHÂN QUẢ (EVENT CHAIN)</div>
+            <div class="causal-timeline" id="causalTimeline">
+              <div class="causal-step">Đang tái dựng chuỗi sự kiện Liquidity Sweep -> Displacement -> MSS -> FVG/OB...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- RIGHT WORKSPACE: TELEGRAM AUTO-BOT + AREA 2 + AREA 3 + AREA 4 -->
+    <aside class="right-section">
+
+      <!-- TELEGRAM BOT AUTO-SENDER CARD -->
+      <div class="card tg-card">
+        <div class="card-header">
+          <div class="card-title">
+            <span>🤖 BOT TELEGRAM TỰ ĐỘNG (AUTO-PUSH)</span>
+          </div>
+          <span class="badge badge-cyan" id="tgStateBadge">SẴN SÀNG</span>
+        </div>
+
+        <div class="tg-auto-bar">
+          <div class="tg-auto-label">
+            <span>🔔 Tự động quét & bắn về Telegram:</span>
+          </div>
+          <button class="tg-switch" id="btnToggleAutoTelegram">ĐANG TẮT</button>
+        </div>
+
+        <div class="tg-form-group">
+          <div class="tg-field">
+            <label>🔑 Telegram Bot Token (Từ @BotFather — Chỉ lưu trên máy bạn)</label>
+            <input type="password" id="tgBotToken" class="tg-input" placeholder="Ví dụ: 7123456789:AAH_xyz...">
+          </div>
+          <div class="tg-field">
+            <label style="display:flex;justify-content:space-between;align-items:center;">
+              <span>💬 Chat ID (Địa chỉ người nhận)</span>
+              <button type="button" id="btnAutoDetectChatId" style="background:#0284c7;color:#fff;border:none;border-radius:4px;padding:2px 7px;font-size:0.66rem;font-weight:800;cursor:pointer;">🔍 Tự lấy Chat ID từ Bot</button>
+            </label>
+            <input type="text" id="tgChatId" class="tg-input" placeholder="Bấm '🔍 Tự lấy Chat ID' (hoặc để trống web tự dò)">
+          </div>
+
+          <div class="tg-row-2col">
+            <div class="tg-field">
+              <label>⏱️ Chu kỳ tự động quét</label>
+              <select id="tgIntervalSelect" class="tg-select">
+                <option value="60">Mỗi 1 phút (Test nhanh)</option>
+                <option value="300" selected>Mỗi 5 phút</option>
+                <option value="900">Mỗi 15 phút</option>
+                <option value="1800">Mỗi 30 phút</option>
+              </select>
+            </div>
+            <div class="tg-field">
+              <label>🎯 Độ tin cậy tối thiểu</label>
+              <select id="tgMinConfSelect" class="tg-select">
+                <option value="65">Confidence ≥ 65%</option>
+                <option value="70" selected>Confidence ≥ 70%</option>
+                <option value="75">Confidence ≥ 75%</option>
+                <option value="80">Confidence ≥ 80%</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="tg-actions-row">
+          <button class="btn-tg-send" id="btnSendTelegramNow">✈️ Gửi Ảnh Chart + Kèo Ngay</button>
+          <button class="btn-tg-save" id="btnSaveTelegramConfig">💾 Lưu Cấu Hình</button>
+        </div>
+
+        <div class="tg-status-log" id="tgStatusLog">
+          💡 Nhập <strong>Bot Token</strong> & <strong>Chat ID</strong> rồi bấm <strong>BẬT</strong> để web tự động chụp ảnh biểu đồ + bắn kèo mới về Telegram (hoặc cấu hình trong <em>GitHub Secrets</em> để chạy ngầm 24/7 khi tắt máy).
+        </div>
+      </div>
+
+      <!-- AREA 2: MARKET OVERVIEW & MULTI-TIMEFRAME MATRIX -->
+      <div class="card overview-card">
+        <div class="card-header">
+          <div class="card-title">
+            <span id="overviewSymbolTitle">🌐 XAUUSD MARKET OVERVIEW</span>
+          </div>
+          <span class="badge badge-cyan" id="currentPriceBadge">$0.00</span>
+        </div>
+
+        <div class="bias-banner bull" id="marketBiasBanner">
+          <div class="bias-left">
+            <div class="bias-sub">MARKET BIAS (ĐỊNH HƯỚNG CHÍNH)</div>
+            <div class="bias-main" id="marketBiasText">BULLISH</div>
+            <div class="bias-dealing" id="dealingRangeStatus">DISCOUNT (< 50% Equilibrium)</div>
+          </div>
+          <div class="confidence-circle">
+            <div class="conf-val" id="confVal">82%</div>
+            <div class="conf-label">Độ Tin Cậy</div>
+          </div>
+        </div>
+
+        <div class="mtf-section">
+          <div class="section-subtitle">📊 MULTI-TIMEFRAME CONFLUENCE (ĐA KHUNG THỜI GIAN)</div>
+          <table class="mtf-table">
+            <thead>
+              <tr>
+                <th>TF</th>
+                <th>Trend (Xu hướng)</th>
+                <th>Structure (Cấu trúc)</th>
+              </tr>
+            </thead>
+            <tbody id="mtfTableBody">
+              <tr><td><strong>D1</strong></td><td class="trend-bull">Tăng</td><td>HH / HL</td></tr>
+              <tr><td><strong>H4</strong></td><td class="trend-bull">Tăng</td><td>HH / HL</td></tr>
+              <tr><td><strong>H1</strong></td><td class="trend-pullback">Điều chỉnh</td><td>LH / LL</td></tr>
+              <tr><td><strong>M15</strong></td><td class="trend-bear">Giảm</td><td>Pullback</td></tr>
+              <tr><td><strong>M5</strong></td><td class="trend-wait">Chờ</td><td>Neutral</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="smc-findings-section">
+          <div class="section-subtitle">🔍 SMC & SUPPLY/DEMAND FINDINGS</div>
+          <div class="findings-list" id="smcFindingsList">
+            <div class="finding-item"><span class="f-key">SSL / BSL:</span> <span class="f-val">Đang quét...</span></div>
+            <div class="finding-item"><span class="f-key">MSS / BOS:</span> <span class="f-val">Đang kiểm tra...</span></div>
+            <div class="finding-item"><span class="f-key">FVG / BPR:</span> <span class="f-val">Đang kiểm tra...</span></div>
+            <div class="finding-item"><span class="f-key">Supply / Demand:</span> <span class="f-val">Đang kiểm tra...</span></div>
+            <div class="finding-item"><span class="f-key">OTE (0.62-0.79):</span> <span class="f-val">Đang kiểm tra...</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AREA 4: TRADING SCENARIOS -->
+      <div class="card scenarios-card">
+        <div class="card-header">
+          <div class="card-title">
+            <span>🎯 TRADING SCENARIOS & ENTRY MODELS</span>
+          </div>
+          <span class="badge badge-gold" id="signalStatusBadge">ACTIVE</span>
+        </div>
+
+        <div class="signal-status-bar" id="signalStatusBar">
+          <span id="signalStatusText">⚡ TÍN HIỆU KÍCH HOẠT: Đang tải mô hình vào lệnh...</span>
+        </div>
+
+        <div class="scenario-box bull-scenario" id="bullScenarioBox">
+          <div class="scenario-header">
+            <span class="scenario-tag bull">📈 BULLISH SCENARIO (KỊCH BẢN TĂNG)</span>
+            <span class="scenario-model" id="bullModelName">Sweep + MSS / OB Retest</span>
+          </div>
+          <p class="scenario-cond" id="bullCondition">Chờ M5/M15 xác nhận MSS tăng và hồi về vùng FVG / Bullish OB.</p>
+          <div class="scenario-levels">
+            <div><small>Entry:</small> <strong id="bullEntry">--</strong></div>
+            <div><small>SL (Vô hiệu):</small> <strong class="text-red" id="bullSL">--</strong></div>
+            <div><small>TP1 / TP2:</small> <strong class="text-green" id="bullTP">--</strong></div>
+          </div>
+          <div class="scenario-inval" id="bullInval">Điểm vô hiệu (Invalidation): Đóng nến dưới đáy OB.</div>
+        </div>
+
+        <div class="scenario-box bear-scenario" id="bearScenarioBox">
+          <div class="scenario-header">
+            <span class="scenario-tag bear">📉 BEARISH SCENARIO (KỊCH BẢN GIẢM)</span>
+            <span class="scenario-model" id="bearModelName">Supply / Bearish OB Retest</span>
+          </div>
+          <p class="scenario-cond" id="bearCondition">Nếu giá hồi lên vùng Premium / Bearish OB và xuất hiện từ chối giá.</p>
+          <div class="scenario-levels">
+            <div><small>Entry:</small> <strong id="bearEntry">--</strong></div>
+            <div><small>SL (Vô hiệu):</small> <strong class="text-red" id="bearSL">--</strong></div>
+            <div><small>TP1 / TP2:</small> <strong class="text-green" id="bearTP">--</strong></div>
+          </div>
+          <div class="scenario-inval" id="bearInval">Điểm vô hiệu (Invalidation): Đóng nến vượt đỉnh vùng Cung.</div>
+        </div>
+
+        <div class="primary-exec-strip">
+          <div class="exec-item"><span>Entry Chính:</span><strong id="valEntry">$0.00</strong></div>
+          <div class="exec-item"><span>SL Chính:</span><strong id="valSL" class="text-red">$0.00</strong></div>
+          <div class="exec-item"><span>TP1 / TP2:</span><strong id="valTP12" class="text-green">$0.00</strong></div>
+          <div class="exec-item"><span>R:R:</span><strong id="rrBadge" class="text-gold">1:2.5</strong></div>
+        </div>
+
+        <!-- FUTURE CONDITIONAL ROADMAP (IF-THEN PLAYBOOK) -->
+        <div class="roadmap-section">
+          <div class="roadmap-header">
+            <span class="section-subtitle" style="margin:0;">🔮 KÈO CHỜ TƯƠNG LAI (CÂY QUYẾT ĐỊNH BOS / CHoCH / SWEEP)</span>
+            <small class="roadmap-hint">Click từng kèo để soi mũi tên dự phóng trên Chart</small>
+          </div>
+          <div class="roadmap-list" id="futureRoadmapList">
+            <div class="roadmap-empty">Đang tính toán các mốc kích hoạt BOS / CHoCH tương lai...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- POSITION SIZING & RISK MANAGEMENT CALCULATOR -->
+      <div class="card calc-card">
+        <div class="card-header">
+          <div class="card-title">
+            <span>🧮 QUẢN LÝ VỐN & TÍNH KHỐI LƯỢNG (RISK CALCULATOR)</span>
+          </div>
+        </div>
+
+        <div class="calc-grid">
+          <div class="input-group">
+            <label>Vốn Tài Khoản ($)</label>
+            <div class="input-wrapper">
+              <span class="prefix">$</span>
+              <input type="number" id="inputCapital" class="input-field" value="1000" step="100">
+            </div>
+          </div>
+
+          <div class="input-group">
+            <label>Rủi Ro / Lệnh (%)</label>
+            <div class="input-wrapper">
+              <span class="prefix">%</span>
+              <input type="number" id="inputRiskPct" class="input-field" value="1.5" step="0.5" min="0.5" max="5">
+            </div>
+          </div>
+        </div>
+
+        <div class="calc-result-box" id="calcResultBox">
+          <div class="calc-row">
+            <span class="label">Rủi ro tối đa nếu chạm SL:</span>
+            <span class="val red" id="calcMaxLoss">$15.00</span>
+          </div>
+          <div class="calc-row">
+            <span class="label">Khối lượng vào lệnh khuyến nghị:</span>
+            <span class="val" id="calcUnits">1.00 PAXG</span>
+          </div>
+          <div class="calc-row">
+            <span class="label">Lợi nhuận dự kiến tại TP1 / TP2:</span>
+            <span class="val green" id="calcProfitTP">+$27.00 / +$45.00</span>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+  </main>
+
+  <div class="img-modal" id="imgModal">
+    <div class="modal-content">
+      <button class="btn-close-modal" id="btnCloseModal">✕</button>
+      <img id="modalImg" src="" alt="Zoom chart">
+    </div>
+  </div>
+
+  <div class="toast" id="toastMessage">
+    <span>✓ Đã thực hiện thành công!</span>
+  </div>
+
+  <script src="smc_engine.js?v=6.5"></script>
+  <script src="app.js?v=6.5"></script>
+</body>
+</html>
