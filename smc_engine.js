@@ -364,16 +364,20 @@
       return Math.abs(mid - currentPrice) <= maxDist;
     });
     const pool = near.length ? near : zones.slice(-maxCount * 2);
-    const rev = [...pool].reverse();
+    const byClosest = [...pool].sort((a, b) => {
+      const distA = Math.abs((a.top + a.bottom) / 2 - currentPrice);
+      const distB = Math.abs((b.top + b.bottom) / 2 - currentPrice);
+      return distA - distB;
+    });
     const selected = [];
-    for (const z of rev) {
+    for (const z of byClosest) {
       const overlaps = selected.some(
         (s) => !(z.top < s.bottom - atr * 0.25 || z.bottom > s.top + atr * 0.25)
       );
       if (!overlaps) selected.push(z);
       if (selected.length >= maxCount) break;
     }
-    return selected.reverse();
+    return selected.sort((a, b) => a.index - b.index);
   }
 
   function evaluateQuickBias(candles, isCurrent) {
@@ -383,18 +387,17 @@
     enrichIndicators(candles);
     const last = candles[candles.length - 1];
     const sw = detectSwings(candles, 2);
-    const lastH = sw.highs[sw.highs.length - 1];
     const lastL = sw.lows[sw.lows.length - 1];
-    if (last.close > last.ema50 && (lastH?.label === "HH" || lastL?.label === "HL")) {
+    if (last.close > last.ema20 && last.ema20 >= last.ema50) {
       return { bias: "BULLISH", trend: "Tăng (Bullish)", structure: "HH / HL", is_current: isCurrent };
     }
-    if (last.close < last.ema50 && (lastH?.label === "LH" || lastL?.label === "LL")) {
+    if (last.close < last.ema20 && last.ema20 <= last.ema50) {
       return { bias: "BEARISH", trend: "Giảm (Bearish)", structure: "LH / LL", is_current: isCurrent };
     }
     if (last.close > last.ema20) {
-      return { bias: "BULLISH", trend: "Hồi tăng", structure: "HL / BOS", is_current: isCurrent };
+      return { bias: "RECOVERY_BULL", trend: "Hồi tăng (Pullback)", structure: lastL?.label === "HL" ? "HL / CHoCH" : "Hồi lên LH", is_current: isCurrent };
     }
-    return { bias: "NEUTRAL", trend: "Điều chỉnh (Pullback)", structure: "Pullback", is_current: isCurrent };
+    return { bias: "PULLBACK_BEAR", trend: "Điều chỉnh (Pullback)", structure: "Pullback về HL", is_current: isCurrent };
   }
 
   async function buildClientMtfMatrix(symbol, activeTf, activeCandles) {
@@ -780,6 +783,35 @@
     const reasons = [];
     const isTrending = last.adx >= 25;
     const isSideway = last.adx < 20;
+    const recentValidSweeps = sweeps.filter((s) => s.is_recent && !s.invalidated);
+
+    // Candlestick rejection on latest closed/live bar
+    const candleRange = Math.max(last.high - last.low, 0.01);
+    const lowerWick = Math.min(last.open, last.close) - last.low;
+    const upperWick = last.high - Math.max(last.open, last.close);
+    const bodySz = Math.abs(last.close - last.open);
+    const hasBullPA = lowerWick >= candleRange * 0.55 && bodySz <= candleRange * 0.35;
+    const hasBearPA = upperWick >= candleRange * 0.55 && bodySz <= candleRange * 0.35;
+
+    // Detect Internal Structure Shifts (window=2) & Short-Term Recovery / Pullback Momentum
+    const intHighs = intSwings.highs.filter((h) => h.index >= Math.max(0, n - 28) && h.index < n - 1).slice(-5);
+    const intLows = intSwings.lows.filter((l) => l.index >= Math.max(0, n - 28) && l.index < n - 1).slice(-5);
+    let intBullIdx = -1;
+    let intBearIdx = -1;
+    for (let k = Math.max(4, n - 18); k < n; k++) {
+      const ck = candles[k].close;
+      if (intHighs.some((h) => h.index < k && ck > h.price)) intBullIdx = k;
+      if (intLows.some((l) => l.index < k && ck < l.price)) intBearIdx = k;
+    }
+    const close3Ago = n >= 4 ? candles[n - 4].close : currentPrice;
+    const shortSlopeUp = currentPrice > last.ema20 && currentPrice > close3Ago + atr * 0.2 && last.rsi >= 42;
+    const shortSlopeDown = currentPrice < last.ema20 && currentPrice < close3Ago - atr * 0.2 && last.rsi <= 58;
+    const isBullRecovery =
+      (currentPrice > last.ema20 && intBullIdx > intBearIdx) ||
+      (shortSlopeUp && (intBullIdx >= intBearIdx || recentValidSweeps.some((s) => s.type === "bullish") || hasBullPA));
+    const isBearPullback =
+      (currentPrice < last.ema20 && intBearIdx > intBullIdx) ||
+      (shortSlopeDown && (intBearIdx >= intBullIdx || recentValidSweeps.some((s) => s.type === "bearish") || hasBearPA));
 
     if (!isSideway) {
       if (last.close > last.ema20 && last.ema20 > last.ema50) {
@@ -788,13 +820,34 @@
       } else if (last.close < last.ema20 && last.ema20 < last.ema50) {
         sellScore += isTrending ? 26 : 16;
         reasons.push(`Giá < EMA 20 < EMA 50 (ADX ${last.adx})`);
+      } else if (last.close > last.ema20 && last.ema20 <= last.ema50) {
+        buyScore += 18;
+        reasons.push("🔄 Giá vượt lên trên EMA 20 — Xác nhận lực Hồi Tăng ngắn hạn (Bullish Recovery)");
+      } else if (last.close < last.ema20 && last.ema20 >= last.ema50) {
+        sellScore += 18;
+        reasons.push("🔄 Giá cắt xuống dưới EMA 20 — Xác nhận nhịp Điều Chỉnh Giảm ngắn hạn (Bearish Pullback)");
       }
     } else {
       reasons.push(`⚠️ Thị trường đi ngang (ADX ${last.adx} < 20) — Hạn chế vào giữa biên độ, chỉ săn Sweep 2 đầu.`);
     }
 
-    if (smcTrend === "bullish") buyScore += 18;
-    else sellScore += 18;
+    if (smcTrend === "bullish") {
+      if (isBearPullback) {
+        sellScore += 20;
+        buyScore += 6;
+        reasons.push("⚡ Cấu trúc nội bộ đảo chiều Giảm (Internal CHoCH / Nhịp chỉnh phá đáy ngắn hạn)");
+      } else {
+        buyScore += 18;
+      }
+    } else {
+      if (isBullRecovery) {
+        buyScore += 20;
+        sellScore += 6;
+        reasons.push("⚡ Cấu trúc nội bộ đảo chiều Tăng (Internal CHoCH / Nhịp hồi phá đỉnh ngắn hạn)");
+      } else {
+        sellScore += 18;
+      }
+    }
 
     // HTF Bias from D1 / H4 MTF Matrix
     let htfBull = 0;
@@ -806,23 +859,23 @@
       }
     }
     if (htfBull === 2 && htfBear === 0) {
-      buyScore += 20;
+      buyScore += 14;
       reasons.push("🌐 Đa khung D1 & H4 đồng thuận TĂNG (HTF Bullish)");
     } else if (htfBear === 2 && htfBull === 0) {
-      sellScore += 20;
+      sellScore += 14;
       reasons.push("🌐 Đa khung D1 & H4 đồng thuận GIẢM (HTF Bearish)");
     } else if (htfBull >= 1 && htfBear === 0) {
-      buyScore += 10;
+      buyScore += 8;
     } else if (htfBear >= 1 && htfBull === 0) {
-      sellScore += 10;
+      sellScore += 8;
     }
-    if (htfBear >= 2) {
-      buyScore = Math.max(0, buyScore - 18);
-      reasons.push("⚠️ Cảnh báo ngược xu hướng lớn D1 & H4 (đang Giảm) nếu canh MUA");
+    if (htfBear >= 2 && !isBullRecovery) {
+      buyScore = Math.max(0, buyScore - 8);
+      reasons.push("⚠️ Lưu ý xu hướng lớn D1 & H4 đang Giảm");
     }
-    if (htfBull >= 2) {
-      sellScore = Math.max(0, sellScore - 18);
-      reasons.push("⚠️ Cảnh báo ngược xu hướng lớn D1 & H4 (đang Tăng) nếu canh BÁN");
+    if (htfBull >= 2 && !isBearPullback) {
+      sellScore = Math.max(0, sellScore - 8);
+      reasons.push("⚠️ Lưu ý xu hướng lớn D1 & H4 đang Tăng");
     }
 
     if (isDiscount) {
@@ -843,7 +896,6 @@
       }
     }
 
-    const recentValidSweeps = sweeps.filter((s) => s.is_recent && !s.invalidated);
     if (recentValidSweeps.length) {
       const sw = recentValidSweeps[recentValidSweeps.length - 1];
       if (sw.type === "bullish") {
@@ -855,13 +907,21 @@
       }
     }
 
-    if (nearBullPoi && Math.abs(currentPrice - nearBullPoi.top) <= atr * 2.8) {
+    if (nearBullPoi && Math.abs(currentPrice - nearBullPoi.top) <= atr * 1.0) {
       buyScore += 20;
       reasons.push(nearBullPoi.causal_desc);
     }
-    if (nearBearPoi && Math.abs(nearBearPoi.bottom - currentPrice) <= atr * 2.8) {
+    if (nearBearPoi && Math.abs(nearBearPoi.bottom - currentPrice) <= atr * 1.0) {
       sellScore += 20;
       reasons.push(nearBearPoi.causal_desc);
+    }
+    if (isBullRecovery && (!nearBearPoi || nearBearPoi.bottom - currentPrice >= atr * 1.25)) {
+      buyScore += 12;
+      reasons.push("🎯 Biên độ hồi còn rộng trước kháng cự OB phía trên — Thuận lợi đánh nhịp Hồi MUA");
+    }
+    if (isBearPullback && (!nearBullPoi || currentPrice - nearBullPoi.top >= atr * 1.25)) {
+      sellScore += 12;
+      reasons.push("🎯 Biên độ giảm còn rộng trước hỗ trợ OB phía dưới — Thuận lợi đánh nhịp BÁN");
     }
 
     if (currentPrice >= poc) {
@@ -874,13 +934,6 @@
       else if (orderbook.ask_pct >= 56) sellScore += 12;
     }
 
-    // Candlestick rejection on latest closed/live bar & RSI divergence
-    const candleRange = Math.max(last.high - last.low, 0.01);
-    const lowerWick = Math.min(last.open, last.close) - last.low;
-    const upperWick = last.high - Math.max(last.open, last.close);
-    const bodySz = Math.abs(last.close - last.open);
-    const hasBullPA = lowerWick >= candleRange * 0.55 && bodySz <= candleRange * 0.35;
-    const hasBearPA = upperWick >= candleRange * 0.55 && bodySz <= candleRange * 0.35;
     if (hasBullPA) {
       buyScore += 14;
       reasons.push("Price Action: Nến rút chân từ chối đáy (Bullish Pin Bar)");
@@ -909,7 +962,9 @@
 
     const dominantScore = Math.max(buyScore, sellScore);
     const netEdge = Math.abs(buyScore - sellScore);
-    const fightingHtf = (buyScore > sellScore && htfBear >= 2) || (sellScore > buyScore && htfBull >= 2);
+    const fightingHtf =
+      (buyScore > sellScore && htfBear >= 2 && !isBullRecovery) ||
+      (sellScore > buyScore && htfBull >= 2 && !isBearPullback);
 
     let confRaw = 36 + netEdge * 0.58 + dominantScore * 0.16;
     if (isSideway) confRaw -= 10;
@@ -934,6 +989,15 @@
     ];
     const nearestSupBarrier = bearBarriers.length ? Math.max(...bearBarriers) : null;
 
+    const hasBullSw = recentValidSweeps.some((s) => s.type === "bullish");
+    const hasBearSw = recentValidSweeps.some((s) => s.type === "bearish");
+    const strongGreenBar = last.close > last.open && bodySz >= atr * 0.35 && upperWick < bodySz;
+    const strongRedBar = last.close < last.open && bodySz >= atr * 0.35 && lowerWick < bodySz;
+    const bullMomentumGuard = (isBullRecovery && currentPrice > last.ema20 && !hasBearPA && !hasBearSw) || strongGreenBar;
+    const bearMomentumGuard = (isBearPullback && currentPrice < last.ema20 && !hasBullPA && !hasBullSw) || strongRedBar;
+    const hasBullTrigger = last.close >= last.open || currentPrice > last.ema20 || hasBullPA || hasBullSw;
+    const hasBearTrigger = last.close <= last.open || currentPrice < last.ema20 || hasBearPA || hasBearSw;
+
     let action = "WAIT";
     let entry = round2(currentPrice);
     let riskDist = round2(atr * 1.45);
@@ -948,7 +1012,9 @@
       const invalPt = nearBullPoi && Math.abs(entry - nearBullPoi.bottom) <= atr * 2.0 ? Math.min(localLow, nearBullPoi.bottom) : localLow;
       const rawDist = entry - invalPt + atr * 0.4;
       riskDist = round2(Math.min(Math.max(rawDist, atr * 1.0), atr * 2.1));
-      if (nearestResBarrier !== null && nearestResBarrier - entry < riskDist * 1.05) {
+      if (bearMomentumGuard || !hasBullTrigger) {
+        blockedReason = "🛡️ Giá đang xả giảm dưới EMA 20 / nến đỏ mạnh chưa rút chân — Chặn lệnh BUY bắt dao rơi!";
+      } else if (nearestResBarrier !== null && nearestResBarrier - entry < riskDist * 1.05) {
         blockedReason = `⚠️ Cản kháng cự ngay trên đầu ($${round2(nearestResBarrier)}) làm R:R thực tế < 1.1:1 — Không vào đuổi!`;
       } else {
         action = "BUY";
@@ -962,7 +1028,9 @@
       const invalPt = nearBearPoi && Math.abs(nearBearPoi.top - entry) <= atr * 2.0 ? Math.max(localHigh, nearBearPoi.top) : localHigh;
       const rawDist = invalPt - entry + atr * 0.4;
       riskDist = round2(Math.min(Math.max(rawDist, atr * 1.0), atr * 2.1));
-      if (nearestSupBarrier !== null && entry - nearestSupBarrier < riskDist * 1.05) {
+      if (bullMomentumGuard || !hasBearTrigger) {
+        blockedReason = "🛡️ Giá đang trong nhịp Hồi Tăng vượt EMA 20 / nến xanh mạnh — Chặn lệnh SELL ngược sóng hồi để bảo vệ vốn!";
+      } else if (nearestSupBarrier !== null && entry - nearestSupBarrier < riskDist * 1.05) {
         blockedReason = `⚠️ Đỡ hỗ trợ ngay dưới chân ($${round2(nearestSupBarrier)}) làm R:R thực tế < 1.1:1 — Không bán đâm đầu vào hỗ trợ!`;
       } else {
         action = "SELL";
@@ -973,12 +1041,13 @@
       }
     }
 
-    const waitIsBear = smcTrend === "bearish" || (smcTrend !== "bullish" && sellScore > buyScore);
+    const waitDirection = buyScore >= sellScore ? "bullish" : "bearish";
+    const waitIsBear = waitDirection === "bearish";
     if (action === "WAIT") {
       if (blockedReason) reasons.unshift(blockedReason);
-      if (!isBull && posPct < 38) {
+      if (waitIsBear && posPct < 38) {
         reasons.unshift(`🛡️ Chống bán đuổi đáy (Vị trí ${posPct}% | RSI ${last.rsi}) — Đợi hồi lên vùng Cung/OB mới canh Bán!`);
-      } else if (isBull && posPct > 62) {
+      } else if (!waitIsBear && posPct > 62) {
         reasons.unshift(`🛡️ Chống mua đuổi đỉnh (Vị trí ${posPct}% | RSI ${last.rsi}) — Đợi hồi về vùng Cầu/OB mới canh Mua!`);
       }
       if (waitIsBear) {
@@ -1038,86 +1107,98 @@
       ? "Model 1: Liquidity Sweep + MSS + Bullish OB/FVG Retest"
       : "Model 2: BSL Sweep + MSS + Bearish OB/Supply Reject";
 
-    // Build Future Conditional Roadmap (IF-THEN: BOS Continuation, CHoCH Reversal, Sweep Trap, POI Retest)
-    const highCands = extSwings.highs.filter((h) => h.price > currentPrice + atr * 0.35).map((h) => h.price);
-    const lowCands = extSwings.lows.filter((l) => l.price < currentPrice - atr * 0.35).map((l) => l.price);
-    const recentWinHigh = Math.max(...candles.slice(-18).map((c) => c.high));
-    const recentWinLow = Math.min(...candles.slice(-18).map((c) => c.low));
-    let resHigh = highCands.length ? round2(Math.min(...highCands)) : round2(Math.max(currentPrice + atr * 1.3, recentWinHigh));
-    let supLow = lowCands.length ? round2(Math.max(...lowCands)) : round2(Math.min(currentPrice - atr * 1.3, recentWinLow));
-    if (resHigh - currentPrice > atr * 4.2) {
-      resHigh = recentWinHigh >= currentPrice + atr * 0.4 ? round2(recentWinHigh) : round2(currentPrice + atr * 1.5);
+    // Build Future Conditional Roadmap (IF-THEN: Primary Pullback-to-Entry, CHoCH Reversal, BOS Continuation, Sweep Trap)
+    const highCands = [...extSwings.highs, ...intSwings.highs.slice(-4)]
+      .filter((h) => h.price > currentPrice + atr * 0.35)
+      .map((h) => h.price);
+    const lowCands = [...extSwings.lows, ...intSwings.lows.slice(-4)]
+      .filter((l) => l.price < currentPrice - atr * 0.35)
+      .map((l) => l.price);
+    const recentWinHigh = Math.max(...candles.slice(-14).map((c) => c.high));
+    const recentWinLow = Math.min(...candles.slice(-14).map((c) => c.low));
+    let resHigh = highCands.length ? round2(Math.min(...highCands)) : round2(Math.max(currentPrice + atr * 1.2, recentWinHigh));
+    let supLow = lowCands.length ? round2(Math.max(...lowCands)) : round2(Math.min(currentPrice - atr * 1.2, recentWinLow));
+    if (resHigh - currentPrice > atr * 2.6) {
+      resHigh = recentWinHigh >= currentPrice + atr * 0.4 && recentWinHigh - currentPrice <= atr * 2.6
+        ? round2(recentWinHigh)
+        : round2(currentPrice + atr * 1.55);
     }
     if (resHigh < currentPrice + atr * 0.35) resHigh = round2(currentPrice + atr * 1.15);
-    if (currentPrice - supLow > atr * 4.2) {
-      supLow = recentWinLow <= currentPrice - atr * 0.4 ? round2(recentWinLow) : round2(currentPrice - atr * 1.5);
+    if (currentPrice - supLow > atr * 2.6) {
+      supLow = recentWinLow <= currentPrice - atr * 0.4 && currentPrice - recentWinLow <= atr * 2.6
+        ? round2(recentWinLow)
+        : round2(currentPrice - atr * 1.55);
     }
     if (supLow > currentPrice - atr * 0.35) supLow = round2(currentPrice - atr * 1.15);
 
-    const bosTrigger = isBull ? resHigh : supLow;
-    const chochTrigger = isBull ? supLow : resHigh;
+    const primaryIsBull = action === "BUY" ? true : action === "SELL" ? false : !waitIsBear;
+    const bosTrigger = primaryIsBull ? resHigh : supLow;
+    const chochTrigger = primaryIsBull ? supLow : resHigh;
     const tfLabel = timeframe.toUpperCase();
     const futureRoadmap = [];
 
-    if (isBull) {
-      const retestE = round2(bosTrigger - atr * 0.35);
-      const rSl = round2(retestE - atr * 1.35);
-      const rRisk = Math.max(Math.abs(retestE - rSl), atr * 0.9);
-      const rTp1 = round2(bosTrigger + rRisk * 1.4);
-      const rTp2 = round2(bosTrigger + rRisk * 2.4);
+    // 1. KÈO 1 (CHÍNH): ĐÓN HỒI VỀ ENTRY (PULLBACK RETEST OB/FVG) — KHỚP 100% VỚI ENTRY / SL / TP1 / TP2 TRÊN BIỂU ĐỒ
+    const poiZone = primaryIsBull ? nearBullPoi : nearBearPoi;
+    if (primaryIsBull) {
+      const zTop = action === "WAIT" ? entry : (poiZone ? poiZone.top : round2(currentPrice - atr * 0.65));
+      const zBot = poiZone ? Math.min(poiZone.bottom, zTop - atr * 0.35) : round2(zTop - atr * 0.8);
+      const rSl = action === "WAIT" ? sl : round2(zBot - atr * 0.5);
+      const rRisk = Math.max(Math.abs(zTop - rSl), atr * 0.85);
+      const rTp1 = action === "WAIT" ? tp1 : round2(zTop + rRisk * 1.6);
+      const rTp2 = action === "WAIT" ? tp2 : round2(zTop + rRisk * 2.5);
       futureRoadmap.push({
-        id: "ROADMAP_BOS_CONT",
-        tag: "KÈO 1 • PHÁ BOS TĂNG",
-        title: `Tiếp diễn Tăng nếu phá BOS trên $${bosTrigger}`,
+        id: "ROADMAP_POI_RETEST",
+        tag: "KÈO 1 • ĐÓN HỒI BUY LIMIT",
+        title: `Đợi giá hồi xuống Entry $${zTop} (Cầu/OB $${zBot} - $${zTop}) rồi Mua lên`,
         direction: "BUY",
-        trigger_type: "BOS",
-        trigger_price: bosTrigger,
-        condition: `NẾU nến ${tfLabel} đóng thân vượt đỉnh $${bosTrigger} (xác nhận BOS Tăng) ➔ Giá hồi nhẹ test vùng FVG/OB mới quanh $${retestE} rồi tăng tiếp.`,
-        entry: retestE,
+        trigger_type: "HỒI BUY",
+        trigger_price: zTop,
+        condition: `Không FOMO mua đuổi: Đợi giá lùi hồi về điểm ENTRY $${zTop} (vùng Cầu/OB $${zBot} - $${zTop}) xuất hiện nến rút chân ➔ Vào MUA hướng lên TP1 $${rTp1} & TP2 $${rTp2}.`,
+        entry: zTop,
         sl: rSl,
         tp1: rTp1,
         tp2: rTp2,
-        rr: round2((rTp2 - retestE) / rRisk),
-        invalidation: `Đóng nến thủng ngược dưới $${rSl}`,
+        rr: round2((rTp2 - zTop) / rRisk),
+        invalidation: `Đóng nến thủng STOP $${rSl}`,
         path_points: [
           { slot: 0, price: currentPrice, label: "Hiện tại" },
-          { slot: 2.5, price: bosTrigger, label: `Phá BOS $${bosTrigger}` },
-          { slot: 5.0, price: retestE, label: "Hồi test Entry" },
-          { slot: 8.0, price: rTp1, label: "TP1" },
-          { slot: 10.5, price: rTp2, label: "TP2" },
+          { slot: 3.0, price: zTop, label: `Hồi Buy $${zTop}` },
+          { slot: 7.0, price: rTp1, label: `TP1 $${rTp1}` },
+          { slot: 10.5, price: rTp2, label: `TP2 $${rTp2}` },
         ],
       });
     } else {
-      const retestE = round2(bosTrigger + atr * 0.35);
-      const rSl = round2(retestE + atr * 1.35);
-      const rRisk = Math.max(Math.abs(rSl - retestE), atr * 0.9);
-      const rTp1 = round2(bosTrigger - rRisk * 1.4);
-      const rTp2 = round2(bosTrigger - rRisk * 2.4);
+      const zBot = action === "WAIT" ? entry : (poiZone ? poiZone.bottom : round2(currentPrice + atr * 0.65));
+      const zTop = poiZone ? Math.max(poiZone.top, zBot + atr * 0.35) : round2(zBot + atr * 0.8);
+      const rSl = action === "WAIT" ? sl : round2(zTop + atr * 0.5);
+      const rRisk = Math.max(Math.abs(rSl - zBot), atr * 0.85);
+      const rTp1 = action === "WAIT" ? tp1 : round2(zBot - rRisk * 1.6);
+      const rTp2 = action === "WAIT" ? tp2 : round2(zBot - rRisk * 2.5);
       futureRoadmap.push({
-        id: "ROADMAP_BOS_CONT",
-        tag: "KÈO 1 • PHÁ BOS GIẢM",
-        title: `Tiếp diễn Giảm nếu phá BOS dưới $${bosTrigger}`,
+        id: "ROADMAP_POI_RETEST",
+        tag: "KÈO 1 • ĐÓN HỒI SELL LIMIT",
+        title: `Đợi giá hồi lên Entry $${zBot} (Cung/OB $${zBot} - $${zTop}) rồi Bán xuống`,
         direction: "SELL",
-        trigger_type: "BOS",
-        trigger_price: bosTrigger,
-        condition: `NẾU nến ${tfLabel} đóng thân thủng đáy $${bosTrigger} (xác nhận BOS Giảm) ➔ Canh giá hồi nhẹ lên vùng Supply/FVG quanh $${retestE} để BÁN tiếp diễn.`,
-        entry: retestE,
+        trigger_type: "HỒI SELL",
+        trigger_price: zBot,
+        condition: `Không FOMO bán đuổi ở đáy: Đợi giá nảy hồi lên điểm ENTRY $${zBot} (vùng Cung/OB $${zBot} - $${zTop}) và rút râu từ chối ➔ Vào BÁN hướng xuống TP1 $${rTp1} & TP2 $${rTp2}.`,
+        entry: zBot,
         sl: rSl,
         tp1: rTp1,
         tp2: rTp2,
-        rr: round2((retestE - rTp2) / rRisk),
-        invalidation: `Đóng nến vượt ngược lên trên $${rSl}`,
+        rr: round2((zBot - rTp2) / rRisk),
+        invalidation: `Đóng nến vượt STOP $${rSl}`,
         path_points: [
           { slot: 0, price: currentPrice, label: "Hiện tại" },
-          { slot: 2.5, price: bosTrigger, label: `Phá BOS $${bosTrigger}` },
-          { slot: 5.0, price: retestE, label: "Hồi test Entry" },
-          { slot: 8.0, price: rTp1, label: "TP1" },
-          { slot: 10.5, price: rTp2, label: "TP2" },
+          { slot: 3.0, price: zBot, label: `Hồi Sell $${zBot}` },
+          { slot: 7.0, price: rTp1, label: `TP1 $${rTp1}` },
+          { slot: 10.5, price: rTp2, label: `TP2 $${rTp2}` },
         ],
       });
     }
 
-    if (!isBull) {
+    // 2. KÈO 2: ĐẢO CHIỀU CẤU TRÚC CHOCH / MSS
+    if (!primaryIsBull) {
       const retestE = round2(chochTrigger - atr * 0.35);
       const rSl = round2(retestE - atr * 1.35);
       const rRisk = Math.max(Math.abs(retestE - rSl), atr * 0.9);
@@ -1130,7 +1211,7 @@
         direction: "BUY",
         trigger_type: "CHoCH",
         trigger_price: chochTrigger,
-        condition: `NẾU giá không phá được đáy mà bật vượt đóng nến qua đỉnh $${chochTrigger} (xác nhận CHoCH / MSS Tăng) ➔ Bỏ phe Bán, canh hồi về Bullish OB quanh $${retestE} để MUA LÊN.`,
+        condition: `NẾU giá không giảm tại vùng hồi mà đóng nến phá vượt đỉnh $${chochTrigger} (xác nhận CHoCH / MSS Tăng) ➔ Hủy chờ Sell, canh nhịp chỉnh nhẹ về $${retestE} để MUA LÊN.`,
         entry: retestE,
         sl: rSl,
         tp1: rTp1,
@@ -1158,7 +1239,7 @@
         direction: "SELL",
         trigger_type: "CHoCH",
         trigger_price: chochTrigger,
-        condition: `NẾU giá quay đầu đóng nến thủng đáy $${chochTrigger} (xác nhận CHoCH / MSS Giảm) ➔ Bỏ phe Mua, canh hồi lên Bearish OB quanh $${retestE} để BÁN XUỐNG.`,
+        condition: `NẾU giá quay đầu đóng nến thủng đáy $${chochTrigger} (xác nhận CHoCH / MSS Giảm) ➔ Hủy chờ Buy, canh hồi lên Bearish OB quanh $${retestE} để BÁN XUỐNG.`,
         entry: retestE,
         sl: rSl,
         tp1: rTp1,
@@ -1175,7 +1256,67 @@
       });
     }
 
-    if (!isBull) {
+    // 3. KÈO 3: PHÁ BOS TIẾP DIỄN KHÔNG HỒI SÂU
+    if (primaryIsBull) {
+      const retestE = round2(bosTrigger - atr * 0.35);
+      const rSl = round2(retestE - atr * 1.35);
+      const rRisk = Math.max(Math.abs(retestE - rSl), atr * 0.9);
+      const rTp1 = round2(bosTrigger + rRisk * 1.4);
+      const rTp2 = round2(bosTrigger + rRisk * 2.4);
+      futureRoadmap.push({
+        id: "ROADMAP_BOS_CONT",
+        tag: "KÈO 3 • PHÁ BOS TĂNG",
+        title: `Tiếp diễn Tăng nếu phá BOS trên $${bosTrigger}`,
+        direction: "BUY",
+        trigger_type: "BOS",
+        trigger_price: bosTrigger,
+        condition: `NẾU nến ${tfLabel} đóng thân vượt đỉnh $${bosTrigger} (xác nhận BOS Tăng) ➔ Giá hồi nhẹ test vùng FVG/OB mới quanh $${retestE} rồi tăng tiếp.`,
+        entry: retestE,
+        sl: rSl,
+        tp1: rTp1,
+        tp2: rTp2,
+        rr: round2((rTp2 - retestE) / rRisk),
+        invalidation: `Đóng nến thủng ngược dưới $${rSl}`,
+        path_points: [
+          { slot: 0, price: currentPrice, label: "Hiện tại" },
+          { slot: 2.5, price: bosTrigger, label: `Phá BOS $${bosTrigger}` },
+          { slot: 5.0, price: retestE, label: "Hồi test Entry" },
+          { slot: 8.0, price: rTp1, label: "TP1" },
+          { slot: 10.5, price: rTp2, label: "TP2" },
+        ],
+      });
+    } else {
+      const retestE = round2(bosTrigger + atr * 0.35);
+      const rSl = round2(retestE + atr * 1.35);
+      const rRisk = Math.max(Math.abs(rSl - retestE), atr * 0.9);
+      const rTp1 = round2(bosTrigger - rRisk * 1.4);
+      const rTp2 = round2(bosTrigger - rRisk * 2.4);
+      futureRoadmap.push({
+        id: "ROADMAP_BOS_CONT",
+        tag: "KÈO 3 • PHÁ BOS GIẢM",
+        title: `Tiếp diễn Giảm nếu phá BOS dưới $${bosTrigger}`,
+        direction: "SELL",
+        trigger_type: "BOS",
+        trigger_price: bosTrigger,
+        condition: `NẾU nến ${tfLabel} đóng thân thủng đáy $${bosTrigger} mà không hồi lên Entry ➔ Canh giá hồi nhẹ lại vùng $${retestE} để BÁN tiếp diễn.`,
+        entry: retestE,
+        sl: rSl,
+        tp1: rTp1,
+        tp2: rTp2,
+        rr: round2((retestE - rTp2) / rRisk),
+        invalidation: `Đóng nến vượt ngược lên trên $${rSl}`,
+        path_points: [
+          { slot: 0, price: currentPrice, label: "Hiện tại" },
+          { slot: 2.5, price: bosTrigger, label: `Phá BOS $${bosTrigger}` },
+          { slot: 5.0, price: retestE, label: "Hồi test Entry" },
+          { slot: 8.0, price: rTp1, label: "TP1" },
+          { slot: 10.5, price: rTp2, label: "TP2" },
+        ],
+      });
+    }
+
+    // 4. KÈO 4: BẪY QUÉT THANH KHOẢN (SWEEP TRAP)
+    if (!primaryIsBull) {
       const sweepWick = round2(supLow - atr * 0.35);
       const trapE = round2(supLow + atr * 0.2);
       const rSl = round2(sweepWick - atr * 0.9);
@@ -1184,7 +1325,7 @@
       const rTp2 = round2(Math.min(resHigh, trapE + rRisk * 2.6));
       futureRoadmap.push({
         id: "ROADMAP_SWEEP_TRAP",
-        tag: "KÈO 3 • BẪY QUÉT RÂU SSL",
+        tag: "KÈO 4 • BẪY QUÉT RÂU SSL",
         title: `Bắt Đảo Chiều nếu chọc râu quét $${supLow} rồi rút lên`,
         direction: "BUY",
         trigger_type: "SWEEP",
@@ -1212,7 +1353,7 @@
       const rTp2 = round2(Math.max(supLow, trapE - rRisk * 2.6));
       futureRoadmap.push({
         id: "ROADMAP_SWEEP_TRAP",
-        tag: "KÈO 3 • BẪY QUÉT RÂU BSL",
+        tag: "KÈO 4 • BẪY QUÉT RÂU BSL",
         title: `Bắt Đảo Chiều nếu chọc râu quét $${resHigh} rồi xả`,
         direction: "SELL",
         trigger_type: "SWEEP",
@@ -1229,65 +1370,6 @@
           { slot: 2.2, price: sweepWick, label: "Quét râu BSL" },
           { slot: 4.2, price: trapE, label: "Rút đầu Entry" },
           { slot: 8.5, price: rTp1, label: "TP1" },
-        ],
-      });
-    }
-
-    const poiZone = isBull ? nearBullPoi : nearBearPoi;
-    if (isBull) {
-      const zTop = poiZone ? poiZone.top : round2(currentPrice - atr * 0.65);
-      const zBot = poiZone ? poiZone.bottom : round2(currentPrice - atr * 1.45);
-      const rSl = round2(zBot - atr * 0.5);
-      const rRisk = Math.max(Math.abs(zTop - rSl), atr * 0.85);
-      const rTp1 = round2(zTop + rRisk * 1.6);
-      const rTp2 = round2(zTop + rRisk * 2.5);
-      futureRoadmap.push({
-        id: "ROADMAP_POI_RETEST",
-        tag: "KÈO 4 • CANH RETEST CẦU / OB",
-        title: `Đợi hồi chạm Bullish OB/FVG ($${zBot} - $${zTop})`,
-        direction: "BUY",
-        trigger_type: "POI",
-        trigger_price: zTop,
-        condition: `Không FOMO đuổi giá: NẾU giá lùi về vùng cầu $${zBot} - $${zTop} kèm nến từ chối ➔ Vào MUA thuận sóng với SL cực ngắn.`,
-        entry: zTop,
-        sl: rSl,
-        tp1: rTp1,
-        tp2: rTp2,
-        rr: round2((rTp2 - zTop) / rRisk),
-        invalidation: `Đóng nến thủng vùng cầu $${rSl}`,
-        path_points: [
-          { slot: 0, price: currentPrice, label: "Hiện tại" },
-          { slot: 3.0, price: zTop, label: "Chạm Cầu/OB" },
-          { slot: 7.0, price: rTp1, label: "TP1" },
-          { slot: 10.0, price: rTp2, label: "TP2" },
-        ],
-      });
-    } else {
-      const zBot = poiZone ? poiZone.bottom : round2(currentPrice + atr * 0.65);
-      const zTop = poiZone ? poiZone.top : round2(currentPrice + atr * 1.45);
-      const rSl = round2(zTop + atr * 0.5);
-      const rRisk = Math.max(Math.abs(rSl - zBot), atr * 0.85);
-      const rTp1 = round2(zBot - rRisk * 1.6);
-      const rTp2 = round2(zBot - rRisk * 2.5);
-      futureRoadmap.push({
-        id: "ROADMAP_POI_RETEST",
-        tag: "KÈO 4 • CANH RETEST CUNG / OB",
-        title: `Đợi hồi lên Bearish OB/FVG ($${zBot} - $${zTop})`,
-        direction: "SELL",
-        trigger_type: "POI",
-        trigger_price: zBot,
-        condition: `Không FOMO bán đuổi: NẾU giá nảy hồi lên vùng cung $${zBot} - $${zTop} và rút râu ➔ Vào BÁN thuận xu hướng giảm.`,
-        entry: zBot,
-        sl: rSl,
-        tp1: rTp1,
-        tp2: rTp2,
-        rr: round2((zBot - rTp2) / rRisk),
-        invalidation: `Đóng nến vượt vùng cung $${rSl}`,
-        path_points: [
-          { slot: 0, price: currentPrice, label: "Hiện tại" },
-          { slot: 3.0, price: zBot, label: "Chạm Cung/OB" },
-          { slot: 7.0, price: rTp1, label: "TP1" },
-          { slot: 10.0, price: rTp2, label: "TP2" },
         ],
       });
     }
@@ -1309,6 +1391,7 @@
       mode,
       current_price: currentPrice,
       action,
+      wait_direction: waitDirection,
       confidence,
       buy_score: buyScore,
       sell_score: sellScore,
@@ -1414,7 +1497,7 @@
 
   function formatTelegramCaption(data) {
     const rawAct = (data.action || "WAIT").toUpperCase();
-    const trendLower = (data.smc?.trend || "neutral").toLowerCase();
+    const trendLower = (data.wait_direction || data.smc?.trend || "neutral").toLowerCase();
     const posPct = data.smc?.dealing_range?.current_pct ?? 50;
     const zoneTag = Number(posPct) <= 50 ? "DISCOUNT (Giá Rẻ)" : "PREMIUM (Giá Đắt)";
 

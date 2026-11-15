@@ -1,0 +1,10 @@
+# Không bao giờ đẩy các file chứa Key/Token cá nhân hoặc bộ nhớ tạm lên GitHub
+.env
+*.env
+config.local.*
+telegram_key.txt
+.last_telegram_signal.json
+__pycache__/
+.mplcache/
+charts_out/
+*.pyc

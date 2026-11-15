@@ -1406,61 +1406,65 @@ def build_future_conditional_roadmap(
 
     roadmap = []
 
-    # 1. KÈO 1: PHÁ BOS TIẾP DIỄN XU HƯỚNG CHÍNH (BOS Continuation)
+    # 1. KÈO 1 (CHÍNH): CANH ĐÓN HỒI VÙNG OB / FVG THUẬN CẤU TRÚC HIỆN TẠI (CHỈ CHỌN ĐÚNG PHÍA HỒI)
+    bull_pois_below = [z for z in (bull_obs + bull_fvgs) if z["top"] <= curr_p - 0.1 * atr]
+    bear_pois_above = [z for z in (bear_obs + bear_fvgs) if z["bottom"] >= curr_p + 0.1 * atr]
     if is_bull_trend:
-        retest_e = round(bos_trigger - 0.35 * atr, 2)
-        sl = round(retest_e - 1.35 * atr, 2)
-        risk = max(abs(retest_e - sl), 0.9 * atr)
-        tp1 = round(bos_trigger + 1.4 * risk, 2)
-        tp2 = round(bos_trigger + 2.4 * risk, 2)
+        zone = max(bull_pois_below, key=lambda z: z["top"]) if bull_pois_below else None
+        z_top = zone["top"] if zone else round(curr_p - 0.65 * atr, 2)
+        z_bot = zone["bottom"] if zone else round(curr_p - 1.45 * atr, 2)
+        sl = round(z_bot - 0.5 * atr, 2)
+        risk = max(abs(z_top - sl), 0.85 * atr)
+        tp1 = round(z_top + 1.6 * risk, 2)
+        tp2 = round(z_top + 2.5 * risk, 2)
         roadmap.append({
-            "id": "ROADMAP_BOS_CONT",
-            "tag": "KÈO 1 • PHÁ BOS TĂNG",
-            "title": f"Tiếp diễn Tăng nếu phá BOS trên ${bos_trigger:,.2f}",
+            "id": "ROADMAP_POI_RETEST",
+            "tag": "KÈO 1 • ĐÓN HỒI BUY LIMIT",
+            "title": f"Đợi hồi chạm Bullish OB/FVG (${z_bot:,.2f} - ${z_top:,.2f})",
             "direction": "BUY",
-            "trigger_type": "BOS",
-            "trigger_price": bos_trigger,
-            "condition": f"NẾU nến {tf_label} đóng thân vượt đỉnh ${bos_trigger:,.2f} (xác nhận BOS Tăng) ➔ Giá thường hồi nhẹ test lại vùng FVG/OB mới quanh ${retest_e:,.2f} rồi tăng tiếp.",
-            "entry": retest_e,
+            "trigger_type": "HỒI BUY",
+            "trigger_price": round(z_top, 2),
+            "condition": f"Không FOMO đuổi giá: NẾU giá lùi về vùng cầu ${z_bot:,.2f} - ${z_top:,.2f} kèm nến từ chối ➔ Vào MUA thuận sóng với SL cực ngắn.",
+            "entry": round(z_top, 2),
             "sl": sl,
             "tp1": tp1,
             "tp2": tp2,
-            "rr": round((tp2 - retest_e) / risk, 2),
-            "invalidation": f"Đóng nến thủng ngược dưới ${sl:,.2f}",
+            "rr": round((tp2 - z_top) / risk, 2),
+            "invalidation": f"Đóng nến thủng vùng cầu ${sl:,.2f}",
             "path_points": [
                 {"slot": 0, "price": round(curr_p, 2), "label": "Hiện tại"},
-                {"slot": 2.5, "price": bos_trigger, "label": f"Phá BOS ${bos_trigger:,.0f}"},
-                {"slot": 5.0, "price": retest_e, "label": "Hồi test Entry"},
-                {"slot": 8.0, "price": tp1, "label": "TP1"},
-                {"slot": 10.5, "price": tp2, "label": "TP2"}
+                {"slot": 3.0, "price": round(z_top, 2), "label": f"Hồi Buy ${z_top:,.2f}"},
+                {"slot": 7.0, "price": tp1, "label": f"TP1 ${tp1:,.2f}"},
+                {"slot": 10.0, "price": tp2, "label": f"TP2 ${tp2:,.2f}"}
             ]
         })
     else:
-        retest_e = round(bos_trigger + 0.35 * atr, 2)
-        sl = round(retest_e + 1.35 * atr, 2)
-        risk = max(abs(sl - retest_e), 0.9 * atr)
-        tp1 = round(bos_trigger - 1.4 * risk, 2)
-        tp2 = round(bos_trigger - 2.4 * risk, 2)
+        zone = min(bear_pois_above, key=lambda z: z["bottom"]) if bear_pois_above else None
+        z_bot = zone["bottom"] if zone else round(curr_p + 0.65 * atr, 2)
+        z_top = zone["top"] if zone else round(curr_p + 1.45 * atr, 2)
+        sl = round(z_top + 0.5 * atr, 2)
+        risk = max(abs(sl - z_bot), 0.85 * atr)
+        tp1 = round(z_bot - 1.6 * risk, 2)
+        tp2 = round(z_bot - 2.5 * risk, 2)
         roadmap.append({
-            "id": "ROADMAP_BOS_CONT",
-            "tag": "KÈO 1 • PHÁ BOS GIẢM",
-            "title": f"Tiếp diễn Giảm nếu phá BOS dưới ${bos_trigger:,.2f}",
+            "id": "ROADMAP_POI_RETEST",
+            "tag": "KÈO 1 • ĐÓN HỒI SELL LIMIT",
+            "title": f"Đợi hồi lên Bearish OB/FVG (${z_bot:,.2f} - ${z_top:,.2f})",
             "direction": "SELL",
-            "trigger_type": "BOS",
-            "trigger_price": bos_trigger,
-            "condition": f"NẾU nến {tf_label} đóng thân thủng đáy ${bos_trigger:,.2f} (xác nhận BOS Giảm) ➔ Canh giá hồi nhẹ lên vùng Supply/FVG quanh ${retest_e:,.2f} để BÁN tiếp diễn.",
-            "entry": retest_e,
+            "trigger_type": "HỒI SELL",
+            "trigger_price": round(z_bot, 2),
+            "condition": f"Không FOMO bán đuổi: NẾU giá nảy hồi lên vùng cung ${z_bot:,.2f} - ${z_top:,.2f} và rút râu ➔ Vào BÁN thuận xu hướng giảm.",
+            "entry": round(z_bot, 2),
             "sl": sl,
             "tp1": tp1,
             "tp2": tp2,
-            "rr": round((retest_e - tp2) / risk, 2),
-            "invalidation": f"Đóng nến vượt ngược lên trên ${sl:,.2f}",
+            "rr": round((z_bot - tp2) / risk, 2),
+            "invalidation": f"Đóng nến vượt vùng cung ${sl:,.2f}",
             "path_points": [
                 {"slot": 0, "price": round(curr_p, 2), "label": "Hiện tại"},
-                {"slot": 2.5, "price": bos_trigger, "label": f"Phá BOS ${bos_trigger:,.0f}"},
-                {"slot": 5.0, "price": retest_e, "label": "Hồi test Entry"},
-                {"slot": 8.0, "price": tp1, "label": "TP1"},
-                {"slot": 10.5, "price": tp2, "label": "TP2"}
+                {"slot": 3.0, "price": round(z_bot, 2), "label": f"Hồi Sell ${z_bot:,.2f}"},
+                {"slot": 7.0, "price": tp1, "label": f"TP1 ${tp1:,.2f}"},
+                {"slot": 10.0, "price": tp2, "label": f"TP2 ${tp2:,.2f}"}
             ]
         })
 
@@ -1522,7 +1526,65 @@ def build_future_conditional_roadmap(
             ]
         })
 
-    # 3. KÈO 3: BẪY QUÉT THANH KHOẢN RÚT RÂU (Liquidity Sweep Trap / False Breakout)
+    # 3. KÈO 3: PHÁ BOS TIẾP DIỄN XU HƯỚNG CHÍNH (BOS Continuation)
+    if is_bull_trend:
+        retest_e = round(bos_trigger - 0.35 * atr, 2)
+        sl = round(retest_e - 1.35 * atr, 2)
+        risk = max(abs(retest_e - sl), 0.9 * atr)
+        tp1 = round(bos_trigger + 1.4 * risk, 2)
+        tp2 = round(bos_trigger + 2.4 * risk, 2)
+        roadmap.append({
+            "id": "ROADMAP_BOS_CONT",
+            "tag": "KÈO 3 • PHÁ BOS TĂNG",
+            "title": f"Tiếp diễn Tăng nếu phá BOS trên ${bos_trigger:,.2f}",
+            "direction": "BUY",
+            "trigger_type": "BOS",
+            "trigger_price": bos_trigger,
+            "condition": f"NẾU nến {tf_label} đóng thân vượt đỉnh ${bos_trigger:,.2f} (xác nhận BOS Tăng) ➔ Giá thường hồi nhẹ test lại vùng FVG/OB mới quanh ${retest_e:,.2f} rồi tăng tiếp.",
+            "entry": retest_e,
+            "sl": sl,
+            "tp1": tp1,
+            "tp2": tp2,
+            "rr": round((tp2 - retest_e) / risk, 2),
+            "invalidation": f"Đóng nến thủng ngược dưới ${sl:,.2f}",
+            "path_points": [
+                {"slot": 0, "price": round(curr_p, 2), "label": "Hiện tại"},
+                {"slot": 2.5, "price": bos_trigger, "label": f"Phá BOS ${bos_trigger:,.0f}"},
+                {"slot": 5.0, "price": retest_e, "label": "Hồi test Entry"},
+                {"slot": 8.0, "price": tp1, "label": "TP1"},
+                {"slot": 10.5, "price": tp2, "label": "TP2"}
+            ]
+        })
+    else:
+        retest_e = round(bos_trigger + 0.35 * atr, 2)
+        sl = round(retest_e + 1.35 * atr, 2)
+        risk = max(abs(sl - retest_e), 0.9 * atr)
+        tp1 = round(bos_trigger - 1.4 * risk, 2)
+        tp2 = round(bos_trigger - 2.4 * risk, 2)
+        roadmap.append({
+            "id": "ROADMAP_BOS_CONT",
+            "tag": "KÈO 3 • PHÁ BOS GIẢM",
+            "title": f"Tiếp diễn Giảm nếu phá BOS dưới ${bos_trigger:,.2f}",
+            "direction": "SELL",
+            "trigger_type": "BOS",
+            "trigger_price": bos_trigger,
+            "condition": f"NẾU nến {tf_label} đóng thân thủng đáy ${bos_trigger:,.2f} (xác nhận BOS Giảm) ➔ Canh giá hồi nhẹ lên vùng Supply/FVG quanh ${retest_e:,.2f} để BÁN tiếp diễn.",
+            "entry": retest_e,
+            "sl": sl,
+            "tp1": tp1,
+            "tp2": tp2,
+            "rr": round((retest_e - tp2) / risk, 2),
+            "invalidation": f"Đóng nến vượt ngược lên trên ${sl:,.2f}",
+            "path_points": [
+                {"slot": 0, "price": round(curr_p, 2), "label": "Hiện tại"},
+                {"slot": 2.5, "price": bos_trigger, "label": f"Phá BOS ${bos_trigger:,.0f}"},
+                {"slot": 5.0, "price": retest_e, "label": "Hồi test Entry"},
+                {"slot": 8.0, "price": tp1, "label": "TP1"},
+                {"slot": 10.5, "price": tp2, "label": "TP2"}
+            ]
+        })
+
+    # 4. KÈO 4: BẪY QUÉT THANH KHOẢN RÚT RÂU (Liquidity Sweep Trap / False Breakout)
     if not is_bull_trend:
         sweep_wick = round(sup_low - 0.35 * atr, 2)
         trap_entry = round(sup_low + 0.2 * atr, 2)
@@ -1532,7 +1594,7 @@ def build_future_conditional_roadmap(
         tp2 = round(min(res_high, trap_entry + 2.6 * risk), 2)
         roadmap.append({
             "id": "ROADMAP_SWEEP_TRAP",
-            "tag": "KÈO 3 • BẪY QUÉT RÂU SSL",
+            "tag": "KÈO 4 • BẪY QUÉT RÂU SSL",
             "title": f"Bắt Đảo Chiều nếu chọc râu quét ${sup_low:,.2f} rồi rút lên",
             "direction": "BUY",
             "trigger_type": "SWEEP",
@@ -1560,7 +1622,7 @@ def build_future_conditional_roadmap(
         tp2 = round(max(sup_low, trap_entry - 2.6 * risk), 2)
         roadmap.append({
             "id": "ROADMAP_SWEEP_TRAP",
-            "tag": "KÈO 3 • BẪY QUÉT RÂU BSL",
+            "tag": "KÈO 4 • BẪY QUÉT RÂU BSL",
             "title": f"Bắt Đảo Chiều nếu chọc râu quét ${res_high:,.2f} rồi xả",
             "direction": "SELL",
             "trigger_type": "SWEEP",
@@ -1577,68 +1639,6 @@ def build_future_conditional_roadmap(
                 {"slot": 2.2, "price": sweep_wick, "label": "Quét râu BSL"},
                 {"slot": 4.2, "price": trap_entry, "label": "Rút đầu Entry"},
                 {"slot": 8.5, "price": tp1, "label": "TP1"}
-            ]
-        })
-
-    # 4. KÈO 4: CANH RETEST VÙNG OB / FVG THUẬN CẤU TRÚC HIỆN TẠI (CHỈ CHỌN ĐÚNG PHÍA HỒI)
-    bull_pois_below = [z for z in (bull_obs + bull_fvgs) if z["top"] <= curr_p - 0.1 * atr]
-    bear_pois_above = [z for z in (bear_obs + bear_fvgs) if z["bottom"] >= curr_p + 0.1 * atr]
-    if is_bull_trend:
-        zone = max(bull_pois_below, key=lambda z: z["top"]) if bull_pois_below else None
-        z_top = zone["top"] if zone else round(curr_p - 0.65 * atr, 2)
-        z_bot = zone["bottom"] if zone else round(curr_p - 1.45 * atr, 2)
-        sl = round(z_bot - 0.5 * atr, 2)
-        risk = max(abs(z_top - sl), 0.85 * atr)
-        tp1 = round(z_top + 1.6 * risk, 2)
-        tp2 = round(z_top + 2.5 * risk, 2)
-        roadmap.append({
-            "id": "ROADMAP_POI_RETEST",
-            "tag": "KÈO 4 • CANH RETEST CẦU / OB",
-            "title": f"Đợi hồi chạm Bullish OB/FVG (${z_bot:,.2f} - ${z_top:,.2f})",
-            "direction": "BUY",
-            "trigger_type": "POI",
-            "trigger_price": round(z_top, 2),
-            "condition": f"Không FOMO đuổi giá: NẾU giá lùi về vùng cầu ${z_bot:,.2f} - ${z_top:,.2f} kèm nến từ chối ➔ Vào MUA thuận sóng với SL cực ngắn.",
-            "entry": round(z_top, 2),
-            "sl": sl,
-            "tp1": tp1,
-            "tp2": tp2,
-            "rr": round((tp2 - z_top) / risk, 2),
-            "invalidation": f"Đóng nến thủng vùng cầu ${sl:,.2f}",
-            "path_points": [
-                {"slot": 0, "price": round(curr_p, 2), "label": "Hiện tại"},
-                {"slot": 3.0, "price": round(z_top, 2), "label": "Chạm Cầu/OB"},
-                {"slot": 7.0, "price": tp1, "label": "TP1"},
-                {"slot": 10.0, "price": tp2, "label": "TP2"}
-            ]
-        })
-    else:
-        zone = min(bear_pois_above, key=lambda z: z["bottom"]) if bear_pois_above else None
-        z_bot = zone["bottom"] if zone else round(curr_p + 0.65 * atr, 2)
-        z_top = zone["top"] if zone else round(curr_p + 1.45 * atr, 2)
-        sl = round(z_top + 0.5 * atr, 2)
-        risk = max(abs(sl - z_bot), 0.85 * atr)
-        tp1 = round(z_bot - 1.6 * risk, 2)
-        tp2 = round(z_bot - 2.5 * risk, 2)
-        roadmap.append({
-            "id": "ROADMAP_POI_RETEST",
-            "tag": "KÈO 4 • CANH RETEST CUNG / OB",
-            "title": f"Đợi hồi lên Bearish OB/FVG (${z_bot:,.2f} - ${z_top:,.2f})",
-            "direction": "SELL",
-            "trigger_type": "POI",
-            "trigger_price": round(z_bot, 2),
-            "condition": f"Không FOMO bán đuổi: NẾU giá nảy hồi lên vùng cung ${z_bot:,.2f} - ${z_top:,.2f} và rút râu ➔ Vào BÁN thuận xu hướng giảm.",
-            "entry": round(z_bot, 2),
-            "sl": sl,
-            "tp1": tp1,
-            "tp2": tp2,
-            "rr": round((z_bot - tp2) / risk, 2),
-            "invalidation": f"Đóng nến vượt vùng cung ${sl:,.2f}",
-            "path_points": [
-                {"slot": 0, "price": round(curr_p, 2), "label": "Hiện tại"},
-                {"slot": 3.0, "price": round(z_bot, 2), "label": "Chạm Cung/OB"},
-                {"slot": 7.0, "price": tp1, "label": "TP1"},
-                {"slot": 10.0, "price": tp2, "label": "TP2"}
             ]
         })
 
@@ -1803,11 +1803,38 @@ def generate_gold_trade_signal(
     confluence_reasons = []
     is_trending = (regime["code"] == "STRONG_TREND")
     is_sideway = (regime["code"] == "SIDEWAY_RANGE")
+    recent_sweeps = [s for s in smc["sweeps"] if s.get("is_recent") and not s.get("invalidated")]
 
     if is_fallback:
         confluence_reasons.append("⚠️ CẢNH BÁO: Mất kết nối API sàn — Đang hiển thị dữ liệu giả lập offline, KHÔNG vào lệnh!")
 
-    # 1. Trend & EMA Alignment (skip trend-EMA bonus in dead sideways chop)
+    # Detect Internal Structure Shifts (window=2) & Short-Term Recovery / Pullback Momentum
+    n_bars = len(df)
+    int_highs = [h for h in int_swings.get("highs", []) if h["index"] >= max(0, n_bars - 28) and h["index"] < n_bars - 1]
+    int_lows = [l for l in int_swings.get("lows", []) if l["index"] >= max(0, n_bars - 28) and l["index"] < n_bars - 1]
+    int_bull_idx = -1
+    int_bear_idx = -1
+    for k in range(max(4, n_bars - 18), n_bars):
+        c_k = float(df['close'].iloc[k])
+        if any(h["index"] < k and c_k > h["price"] for h in int_highs[-5:]):
+            int_bull_idx = k
+        if any(l["index"] < k and c_k < l["price"] for l in int_lows[-5:]):
+            int_bear_idx = k
+
+    close_3_ago = float(df['close'].iloc[-4]) if n_bars >= 4 else current_price
+    short_slope_up = (current_price > ema20) and (current_price > close_3_ago + 0.2 * atr) and (rsi >= 42.0)
+    short_slope_down = (current_price < ema20) and (current_price < close_3_ago - 0.2 * atr) and (rsi <= 58.0)
+
+    is_bull_recovery = (
+        (current_price > ema20 and int_bull_idx > int_bear_idx)
+        or (short_slope_up and (int_bull_idx >= int_bear_idx or any(s["type"] == "bullish" for s in recent_sweeps) or any(p["type"] == "bullish" for p in patterns)))
+    )
+    is_bear_pullback = (
+        (current_price < ema20 and int_bear_idx > int_bull_idx)
+        or (short_slope_down and (int_bear_idx >= int_bull_idx or any(s["type"] == "bearish" for s in recent_sweeps) or any(p["type"] == "bearish" for p in patterns)))
+    )
+
+    # 1. Trend, EMA Alignment & Active Recovery / Pullback Detection
     if not is_sideway:
         if current_price > ema20 > ema50:
             buy_score += (26 if is_trending else 16)
@@ -1815,14 +1842,30 @@ def generate_gold_trade_signal(
         elif current_price < ema20 < ema50:
             sell_score += (26 if is_trending else 16)
             confluence_reasons.append(f"[{regime['name']}] Giá < EMA 20 < EMA 50 (Xu hướng giảm)")
+        elif current_price > ema20 and ema20 <= ema50:
+            buy_score += 18
+            confluence_reasons.append("🔄 Giá vượt lên trên EMA 20 — Xác nhận lực Hồi Tăng ngắn hạn (Bullish Recovery)")
+        elif current_price < ema20 and ema20 >= ema50:
+            sell_score += 18
+            confluence_reasons.append("🔄 Giá cắt xuống dưới EMA 20 — Xác nhận nhịp Điều Chỉnh Giảm ngắn hạn (Bearish Pullback)")
     else:
         confluence_reasons.append(f"⚠️ Thị trường đi ngang (ADX {regime['adx']} < 20) — Hạn chế vào giữa biên độ, chỉ săn Sweep 2 đầu.")
 
-    # 1b. Chronological SMC Structure & HTF MTF Confluence (D1 + H4)
+    # 1b. Chronological SMC Structure (External + Internal Recovery Override) & HTF MTF Confluence
     if smc["trend"] == "bullish":
-        buy_score += 18
+        if is_bear_pullback:
+            sell_score += 20
+            buy_score += 6
+            confluence_reasons.append("⚡ Cấu trúc nội bộ đảo chiều Giảm (Internal CHoCH / Nhịp chỉnh phá đáy ngắn hạn)")
+        else:
+            buy_score += 18
     elif smc["trend"] == "bearish":
-        sell_score += 18
+        if is_bull_recovery:
+            buy_score += 20
+            sell_score += 6
+            confluence_reasons.append("⚡ Cấu trúc nội bộ đảo chiều Tăng (Internal CHoCH / Nhịp hồi phá đỉnh ngắn hạn)")
+        else:
+            sell_score += 18
 
     htf_bull_cnt = 0
     htf_bear_cnt = 0
@@ -1842,22 +1885,22 @@ def generate_gold_trade_signal(
             htf_bear_cnt = 1
 
     if htf_bull_cnt == 2 and htf_bear_cnt == 0:
-        buy_score += 20
+        buy_score += 14
         confluence_reasons.append("🌐 Đa khung D1 & H4 đồng thuận TĂNG (HTF Bullish)")
     elif htf_bear_cnt == 2 and htf_bull_cnt == 0:
-        sell_score += 20
+        sell_score += 14
         confluence_reasons.append("🌐 Đa khung D1 & H4 đồng thuận GIẢM (HTF Bearish)")
     elif htf_bull_cnt >= 1 and htf_bear_cnt == 0:
-        buy_score += 10
+        buy_score += 8
     elif htf_bear_cnt >= 1 and htf_bull_cnt == 0:
-        sell_score += 10
+        sell_score += 8
 
-    if htf_bear_cnt >= 2:
-        buy_score = max(0, buy_score - 18)
-        confluence_reasons.append("⚠️ Cảnh báo ngược xu hướng lớn D1 & H4 (đang Giảm) nếu canh MUA")
-    if htf_bull_cnt >= 2:
-        sell_score = max(0, sell_score - 18)
-        confluence_reasons.append("⚠️ Cảnh báo ngược xu hướng lớn D1 & H4 (đang Tăng) nếu canh BÁN")
+    if htf_bear_cnt >= 2 and not is_bull_recovery:
+        buy_score = max(0, buy_score - 8)
+        confluence_reasons.append("⚠️ Lưu ý xu hướng lớn D1 & H4 đang Giảm")
+    if htf_bull_cnt >= 2 and not is_bear_pullback:
+        sell_score = max(0, sell_score - 8)
+        confluence_reasons.append("⚠️ Lưu ý xu hướng lớn D1 & H4 đang Tăng")
 
     # 2. Dealing Range Premium / Discount & OTE
     dr = smc["dealing_range"]
@@ -1877,7 +1920,6 @@ def generate_gold_trade_signal(
             confluence_reasons.append(dr["ote"]["desc"])
 
     # 3. Valid Liquidity Sweep (non-invalidated only!)
-    recent_sweeps = [s for s in smc["sweeps"] if s.get("is_recent") and not s.get("invalidated")]
     if recent_sweeps:
         sw = recent_sweeps[-1]
         if sw["type"] == "bullish":
@@ -1887,13 +1929,20 @@ def generate_gold_trade_signal(
             sell_score += 28
             confluence_reasons.append(f"⚡ {sw['name']} tại ${sw['swept_level']:,.2f}")
 
-    # 4. Order Blocks & Supply/Demand (proximity gated)
-    if nearest_bullish_ob and abs(current_price - nearest_bullish_ob["top"]) <= 2.8 * atr:
+    # 4. Order Blocks & Supply/Demand (tight proximity test + clear recovery room bonus)
+    if nearest_bullish_ob and abs(current_price - nearest_bullish_ob["top"]) <= 1.0 * atr:
         buy_score += 20
         confluence_reasons.append(nearest_bullish_ob["causal_desc"])
-    if nearest_bearish_ob and abs(nearest_bearish_ob["bottom"] - current_price) <= 2.8 * atr:
+    if nearest_bearish_ob and abs(nearest_bearish_ob["bottom"] - current_price) <= 1.0 * atr:
         sell_score += 20
         confluence_reasons.append(nearest_bearish_ob["causal_desc"])
+
+    if is_bull_recovery and (nearest_bearish_ob is None or (nearest_bearish_ob["bottom"] - current_price) >= 1.25 * atr):
+        buy_score += 12
+        confluence_reasons.append("🎯 Biên độ hồi còn rộng trước kháng cự OB phía trên — Thuận lợi đánh nhịp Hồi MUA")
+    if is_bear_pullback and (nearest_bullish_ob is None or (current_price - nearest_bullish_ob["top"]) >= 1.25 * atr):
+        sell_score += 12
+        confluence_reasons.append("🎯 Biên độ giảm còn rộng trước hỗ trợ OB phía dưới — Thuận lợi đánh nhịp BÁN")
 
     # 5. ICT AMD / Judas Swing & Killzone
     if ict["judas_swing"]:
@@ -1941,7 +1990,10 @@ def generate_gold_trade_signal(
     # Honest Net-Edge Confidence (conflicting buy & sell scores lower confidence!)
     dominant_score = max(buy_score, sell_score)
     net_edge = abs(buy_score - sell_score)
-    fighting_htf = (buy_score > sell_score and htf_bear_cnt >= 2) or (sell_score > buy_score and htf_bull_cnt >= 2)
+    fighting_htf = (
+        (buy_score > sell_score and htf_bear_cnt >= 2 and not is_bull_recovery)
+        or (sell_score > buy_score and htf_bull_cnt >= 2 and not is_bear_pullback)
+    )
 
     if is_fallback:
         confidence_pct = 0
@@ -1962,7 +2014,7 @@ def generate_gold_trade_signal(
     sideway_bull_ok = (not is_sideway) or any(s["type"] == "bullish" for s in recent_sweeps) or any(p["type"] == "bullish" for p in patterns)
     sideway_bear_ok = (not is_sideway) or any(s["type"] == "bearish" for s in recent_sweeps) or any(p["type"] == "bearish" for p in patterns)
 
-    preferred_wait_dir = smc["trend"] if smc["trend"] in ("bullish", "bearish") else ("bullish" if buy_score >= sell_score else "bearish")
+    preferred_wait_dir = "bullish" if buy_score >= sell_score else "bearish"
 
     # Identify structural obstacles between entry and TP1 before greenlighting Market Entry
     bull_barriers = [z["bottom"] for z in smc["order_blocks"] if z["type"] == "bearish" and z["bottom"] > current_price + 0.15 * atr]
@@ -1973,7 +2025,27 @@ def generate_gold_trade_signal(
     bear_barriers += [l["price"] for l in ext_swings["lows"][-6:] if l["price"] < current_price - 0.25 * atr]
     nearest_sup_barrier = max(bear_barriers) if bear_barriers else None
 
+    last_open = float(latest['open'])
+    last_close = float(latest['close'])
+    last_body = float(latest['body_size'])
+    last_u_wick = float(latest['upper_wick'])
+    last_l_wick = float(latest['lower_wick'])
+    has_bull_pa = any(p["type"] == "bullish" for p in patterns)
+    has_bear_pa = any(p["type"] == "bearish" for p in patterns)
+    has_bull_sw = any(s["type"] == "bullish" for s in recent_sweeps)
+    has_bear_sw = any(s["type"] == "bearish" for s in recent_sweeps)
+
+    strong_green_bar = (last_close > last_open) and (last_body >= 0.35 * atr) and (last_u_wick < last_body)
+    strong_red_bar = (last_close < last_open) and (last_body >= 0.35 * atr) and (last_l_wick < last_body)
+
+    bull_momentum_guard = (is_bull_recovery and current_price > ema20 and not has_bear_pa and not has_bear_sw) or strong_green_bar
+    bear_momentum_guard = (is_bear_pullback and current_price < ema20 and not has_bull_pa and not has_bull_sw) or strong_red_bar
+
+    has_bull_trigger = (last_close >= last_open) or (current_price > ema20) or has_bull_pa or has_bull_sw
+    has_bear_trigger = (last_close <= last_open) or (current_price < ema20) or has_bear_pa or has_bear_sw
+
     blocked_reason = None
+    action = "WAIT"
 
     if (
         not is_fallback
@@ -1983,7 +2055,6 @@ def generate_gold_trade_signal(
         and rsi < 72.0
         and sideway_bull_ok
     ):
-        action = "BUY"
         entry_price = round(current_price, 2)
         local_low = float(df['low'].iloc[-8:].min())
         inval_point = local_low
@@ -1991,9 +2062,12 @@ def generate_gold_trade_signal(
             inval_point = min(inval_point, nearest_bullish_ob["bottom"])
         raw_dist = (entry_price - inval_point) + (0.4 * atr)
         risk_dist = min(max(raw_dist, 1.0 * atr), 2.1 * atr)
-        if nearest_res_barrier is not None and (nearest_res_barrier - entry_price) < 1.05 * risk_dist:
+        if bear_momentum_guard or not has_bull_trigger:
+            blocked_reason = "🛡️ Giá đang xả giảm dưới EMA 20 / nến đỏ mạnh chưa rút chân — Chặn lệnh BUY bắt dao rơi!"
+        elif nearest_res_barrier is not None and (nearest_res_barrier - entry_price) < 1.05 * risk_dist:
             blocked_reason = f"⚠️ Cản kháng cự ngay trên đầu (${nearest_res_barrier:,.2f}) làm R:R thực tế < 1.1:1 — Không vào đuổi!"
         else:
+            action = "BUY"
             sl_price = round(entry_price - risk_dist, 2)
             tp1_price = round(entry_price + 1.6 * risk_dist, 2)
             tp2_price = round(entry_price + 2.5 * risk_dist, 2)
@@ -2008,7 +2082,6 @@ def generate_gold_trade_signal(
         and rsi > 28.0
         and sideway_bear_ok
     ):
-        action = "SELL"
         entry_price = round(current_price, 2)
         local_high = float(df['high'].iloc[-8:].max())
         inval_point = local_high
@@ -2016,23 +2089,24 @@ def generate_gold_trade_signal(
             inval_point = max(inval_point, nearest_bearish_ob["top"])
         raw_dist = (inval_point - entry_price) + (0.4 * atr)
         risk_dist = min(max(raw_dist, 1.0 * atr), 2.1 * atr)
-        if nearest_sup_barrier is not None and (entry_price - nearest_sup_barrier) < 1.05 * risk_dist:
+        if bull_momentum_guard or not has_bear_trigger:
+            blocked_reason = "🛡️ Giá đang trong nhịp Hồi Tăng vượt EMA 20 / nến xanh mạnh — Chặn lệnh SELL ngược sóng hồi để bảo vệ vốn!"
+        elif nearest_sup_barrier is not None and (entry_price - nearest_sup_barrier) < 1.05 * risk_dist:
             blocked_reason = f"⚠️ Đỡ hỗ trợ ngay dưới chân (${nearest_sup_barrier:,.2f}) làm R:R thực tế < 1.1:1 — Không bán đâm đầu vào hỗ trợ!"
         else:
+            action = "SELL"
             sl_price = round(entry_price + risk_dist, 2)
             tp1_price = round(entry_price - 1.6 * risk_dist, 2)
             tp2_price = round(entry_price - 2.5 * risk_dist, 2)
             tp3_price = round(entry_price - 3.5 * risk_dist, 2)
             rr_ratio = round((entry_price - tp2_price) / max(risk_dist, 0.01), 2)
-    else:
-        action = "WAIT"
 
     if action == "WAIT":
         if blocked_reason:
             confluence_reasons.insert(0, blocked_reason)
-        if not is_fallback and ((smc["trend"] == "bearish" and pos_pct < 38.0) or rsi <= 28.0):
+        if not is_fallback and ((preferred_wait_dir == "bearish" and pos_pct < 38.0) or rsi <= 28.0):
             confluence_reasons.insert(0, f"🛡️ Chống bán đuổi đáy (Vị trí {pos_pct}% | RSI {rsi:.1f}) — Đợi hồi lên vùng Cung/OB mới canh Bán!")
-        elif not is_fallback and ((smc["trend"] == "bullish" and pos_pct > 62.0) or rsi >= 72.0):
+        elif not is_fallback and ((preferred_wait_dir == "bullish" and pos_pct > 62.0) or rsi >= 72.0):
             confluence_reasons.insert(0, f"🛡️ Chống mua đuổi đỉnh (Vị trí {pos_pct}% | RSI {rsi:.1f}) — Đợi hồi về vùng Cầu/OB mới canh Mua!")
 
         if preferred_wait_dir == "bearish":
@@ -2094,6 +2168,25 @@ def generate_gold_trade_signal(
     }
 
     future_roadmap = build_future_conditional_roadmap(df, smc, ict, current_price, atr, timeframe)
+    if action == "WAIT" and future_roadmap and future_roadmap[0].get("id") == "ROADMAP_POI_RETEST":
+        wait_is_bull = (preferred_wait_dir == "bullish")
+        future_roadmap[0].update({
+            "tag": "KÈO 1 • ĐÓN HỒI BUY LIMIT" if wait_is_bull else "KÈO 1 • ĐÓN HỒI SELL LIMIT",
+            "direction": "BUY" if wait_is_bull else "SELL",
+            "trigger_type": "HỒI BUY" if wait_is_bull else "HỒI SELL",
+            "trigger_price": entry_price,
+            "entry": entry_price,
+            "sl": sl_price,
+            "tp1": tp1_price,
+            "tp2": tp2_price,
+            "rr": rr_ratio,
+            "path_points": [
+                {"slot": 0, "price": round(current_price, 2), "label": "Hiện tại"},
+                {"slot": 3.0, "price": entry_price, "label": f"{'Hồi Buy' if wait_is_bull else 'Hồi Sell'} ${entry_price:,.2f}"},
+                {"slot": 7.0, "price": tp1_price, "label": f"TP1 ${tp1_price:,.2f}"},
+                {"slot": 10.5, "price": tp2_price, "label": f"TP2 ${tp2_price:,.2f}"},
+            ],
+        })
 
     return {
         "symbol": symbol,
@@ -2102,6 +2195,7 @@ def generate_gold_trade_signal(
         "data_source": data_source,
         "current_price": current_price,
         "action": action,
+        "wait_direction": preferred_wait_dir,
         "confidence": confidence_pct,
         "buy_score": buy_score,
         "sell_score": sell_score,

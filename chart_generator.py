@@ -354,7 +354,11 @@ def generate_annotated_chart_image(
     sig_start_x = max(0, n - 20)
     sig_end_x = n + 6
     is_wait = (action == "WAIT")
-    entry_prefix = "LIMIT WAIT" if is_wait else "ENTRY"
+    is_buy_setup = (sl < entry)
+    if is_wait:
+        entry_prefix = "CHỜ HỒI BUY LIMIT" if is_buy_setup else "CHỜ HỒI SELL LIMIT"
+    else:
+        entry_prefix = f"ENTRY {action}"
 
     ax_main.hlines(y=entry, xmin=sig_start_x, xmax=sig_end_x, color=c_entry, linestyle=':' if is_wait else '--', linewidth=1.9, zorder=6)
     ax_main.text(
@@ -391,14 +395,32 @@ def generate_annotated_chart_image(
         zorder=8, parse_math=False
     )
 
-    # Risk/Reward shaded boxes
+    # Risk/Reward shaded boxes & Pullback-to-Entry trajectory arrow
     rr_box_width = sig_end_x - sig_start_x
-    if action == "BUY":
-        ax_main.add_patch(patches.Rectangle((sig_start_x, sl), rr_box_width, entry - sl, facecolor='#ff1744', alpha=0.10, zorder=1))
-        ax_main.add_patch(patches.Rectangle((sig_start_x, entry), rr_box_width, tp2 - entry, facecolor='#00e676', alpha=0.10, zorder=1))
-    elif action == "SELL":
-        ax_main.add_patch(patches.Rectangle((sig_start_x, entry), rr_box_width, sl - entry, facecolor='#ff1744', alpha=0.10, zorder=1))
-        ax_main.add_patch(patches.Rectangle((sig_start_x, tp2), rr_box_width, entry - tp2, facecolor='#00e676', alpha=0.10, zorder=1))
+    box_alpha = 0.07 if is_wait else 0.10
+    if is_buy_setup:
+        ax_main.add_patch(patches.Rectangle((sig_start_x, sl), rr_box_width, entry - sl, facecolor='#ff1744', alpha=box_alpha, zorder=1))
+        ax_main.add_patch(patches.Rectangle((sig_start_x, entry), rr_box_width, tp2 - entry, facecolor='#00e676', alpha=box_alpha, zorder=1))
+    else:
+        ax_main.add_patch(patches.Rectangle((sig_start_x, entry), rr_box_width, sl - entry, facecolor='#ff1744', alpha=box_alpha, zorder=1))
+        ax_main.add_patch(patches.Rectangle((sig_start_x, tp2), rr_box_width, entry - tp2, facecolor='#00e676', alpha=box_alpha, zorder=1))
+
+    # Draw dashed Pullback -> Entry -> TP1 -> TP2 trajectory path
+    curr_close = float(sub_df['close'].iloc[-1])
+    path_color = '#00e676' if is_buy_setup else '#ff5252'
+    if is_wait or abs(entry - curr_close) > 0.05:
+        px = [n - 1, n + 1.8, n + 3.8, n + 5.5]
+        py = [curr_close, entry, tp1, tp2]
+        ax_main.plot(px, py, color=path_color, linestyle='--', linewidth=2.0, alpha=0.92, zorder=7)
+        ax_main.scatter(px[1:], py[1:], color=['#00f0ff', c_tp, c_tp2], edgecolors='white', s=42, zorder=8)
+        pull_lbl = f"Đón hồi {'Buy' if is_buy_setup else 'Sell'}\n${entry:,.2f}"
+        ax_main.text(
+            px[1], entry, pull_lbl,
+            color='#00f0ff', fontsize=8, fontweight='bold',
+            ha='center', va='top' if is_buy_setup else 'bottom',
+            bbox=dict(boxstyle='round,pad=0.2', facecolor='#0b0e14', edgecolor='#00f0ff', alpha=0.92),
+            zorder=9, parse_math=False
+        )
 
     all_prices = list(sub_df['low']) + list(sub_df['high']) + [entry, sl, tp1, tp2]
     min_y, max_y = min(all_prices), max(all_prices)

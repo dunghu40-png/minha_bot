@@ -38,12 +38,21 @@ def build_mtf_summary(symbol: str, primary_tf: str, primary_df):
             df_ind = calculate_indicators(df_tf)
             sw = detect_swings_and_labels(df_ind)
             last = df_ind.iloc[-1]
-            if last["close"] >= last["ema_50"]:
+            c_val = float(last["close"])
+            e20_val = float(last["ema_20"])
+            e50_val = float(last["ema_50"])
+            if c_val > e20_val and e20_val >= e50_val:
                 bias = "BULLISH"
                 trend_vn = "Tăng"
-            else:
+            elif c_val < e20_val and e20_val <= e50_val:
                 bias = "BEARISH"
                 trend_vn = "Giảm"
+            elif c_val > e20_val and e20_val < e50_val:
+                bias = "RECOVERY_BULL"
+                trend_vn = "Hồi Tăng"
+            else:
+                bias = "PULLBACK_BEAR"
+                trend_vn = "Nhịp Chỉnh"
             matrix.append({
                 "tf": label,
                 "code": code,
@@ -67,6 +76,7 @@ def build_mtf_summary(symbol: str, primary_tf: str, primary_df):
 def format_telegram_html_caption(analysis: dict, mtf_matrix: list) -> str:
     raw_action = str(analysis.get("action", "WAIT")).upper()
     smc_trend = str(analysis.get("smc", {}).get("trend", "neutral")).lower()
+    wait_dir = str(analysis.get("wait_direction") or smc_trend).lower()
     dr = analysis.get("smc", {}).get("dealing_range", {})
     pos_pct = dr.get("current_pct", 50)
     zone_tag = "DISCOUNT (Giá Rẻ)" if float(pos_pct) <= 50 else "PREMIUM (Giá Đắt)"
@@ -81,7 +91,7 @@ def format_telegram_html_caption(analysis: dict, mtf_matrix: list) -> str:
         entry_label = "Entry"
     else:
         icon = "⏳⚠️"
-        dir_vn = "Canh Hồi BÁN" if smc_trend == "bearish" else ("Canh Hồi MUA" if smc_trend == "bullish" else "Quan sát")
+        dir_vn = "Canh Hồi BÁN" if wait_dir == "bearish" else ("Canh Hồi MUA" if wait_dir == "bullish" else "Quan sát")
         action_label = f"WAIT — {dir_vn} (KHÔNG ĐUỔI GIÁ)"
         entry_label = "Entry Limit Chờ Hồi"
 

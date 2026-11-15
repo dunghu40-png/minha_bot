@@ -13,8 +13,8 @@ const API_BASE = (window.location.protocol === "file:" || !window.location.host)
   : "";
 
 const MODE_PRESETS = {
-  clean: ["structure", "supply_demand"],
-  smc: ["structure", "liquidity", "order_blocks", "imbalance", "ict"],
+  clean: ["structure", "supply_demand", "imbalance", "order_blocks", "ict"],
+  smc: ["structure", "liquidity", "order_blocks", "imbalance", "supply_demand", "ict"],
   full: ["structure", "liquidity", "order_blocks", "imbalance", "supply_demand", "ict", "price_action", "indicators"]
 };
 
@@ -985,13 +985,18 @@ function renderDashboard(data) {
   const biasBanner = document.getElementById("marketBiasBanner");
   const smc = data.smc || {};
   const dr = smc.dealing_range;
-  const trendStr = (smc.trend || "neutral").toLowerCase();
-  const isBearTrend = trendStr === "bearish";
-  const isBullTrend = trendStr === "bullish";
+  const effectiveDir =
+    data.action === "BUY"
+      ? "bullish"
+      : data.action === "SELL"
+      ? "bearish"
+      : (data.wait_direction || smc.trend || "neutral").toLowerCase();
+  const isBearTrend = effectiveDir === "bearish";
+  const isBullTrend = effectiveDir === "bullish";
   const posPct = dr ? Number(dr.current_pct) : 50;
-  const isBearInBottom = isBearTrend && posPct < 38;
-  const isBullInTop = isBullTrend && posPct > 62;
-  const isWaitState = data.action === "WAIT" || isBearInBottom || isBullInTop;
+  const isBearInBottom = data.action === "WAIT" && isBearTrend && posPct < 38;
+  const isBullInTop = data.action === "WAIT" && isBullTrend && posPct > 62;
+  const isWaitState = data.action === "WAIT";
 
   if (biasBanner) {
     biasBanner.classList.remove("bull", "bear", "wait");
@@ -1005,18 +1010,22 @@ function renderDashboard(data) {
   let biasMainText = "CHỜ XÁC NHẬN (NEUTRAL)";
   if (data.is_fallback) {
     biasMainText = "⚠️ MẤT KẾT NỐI SÀN — CHẾ ĐỘ XEM THỬ OFFLINE";
+  } else if (data.action === "BUY") {
+    biasMainText = (smc.trend || "").toLowerCase() === "bearish"
+      ? "NHỊP HỒI / ĐẢO CHIỀU TĂNG • TÍN HIỆU MUA (BUY)"
+      : "XU HƯỚNG TĂNG • ĐẸP ĐỂ MUA (BUY ACTIVE)";
+  } else if (data.action === "SELL") {
+    biasMainText = (smc.trend || "").toLowerCase() === "bullish"
+      ? "NHỊP CHỈNH / ĐẢO CHIỀU GIẢM • TÍN HIỆU BÁN (SELL)"
+      : "XU HƯỚNG GIẢM • ĐẸP ĐỂ BÁN (SELL ACTIVE)";
   } else if (isBearInBottom) {
     biasMainText = "XU HƯỚNG GIẢM • CHỜ HỒI LÊN MỚI BÁN";
   } else if (isBullInTop) {
     biasMainText = "XU HƯỚNG TĂNG • CHỜ HỒI VỀ MỚI MUA";
-  } else if (data.action === "BUY") {
-    biasMainText = "XU HƯỚNG TĂNG • ĐẸP ĐỂ MUA (DISCOUNT)";
-  } else if (data.action === "SELL") {
-    biasMainText = "XU HƯỚNG GIẢM • ĐẸP ĐỂ BÁN (PREMIUM)";
-  } else if (isBearTrend) {
-    biasMainText = "XU HƯỚNG GIẢM • ĐANG CHỜ TÍN HIỆU BÁN";
   } else if (isBullTrend) {
-    biasMainText = "XU HƯỚNG TĂNG • ĐANG CHỜ TÍN HIỆU MUA";
+    biasMainText = "ƯU TIÊN MUA (BULLISH) • CHỜ ĐIỂM VÀO BUY";
+  } else if (isBearTrend) {
+    biasMainText = "ƯU TIÊN BÁN (BEARISH) • CHỜ ĐIỂM VÀO SELL";
   }
   setText("marketBiasText", biasMainText);
   setText("confVal", data.is_fallback ? "OFFLINE" : `${data.confidence}%`);
@@ -1079,6 +1088,63 @@ function renderDashboard(data) {
       <span class="f-val">${dr && dr.ote ? `${fmtPrice(dr.ote.bottom)} - ${fmtPrice(dr.ote.top)}` : "--"}</span>
     </div>
   `);
+
+  const explainEl = document.getElementById("smcPlainExplain");
+  if (explainEl) {
+    const isBuyPlan = Number(data.sl) < Number(data.entry);
+    const dirLabel = isBuyPlan ? "MUA (BUY)" : "BÁN (SELL)";
+    const actionCls = data.action === "BUY" ? "is-buy" : (data.action === "SELL" ? "is-sell" : "");
+    let summaryLine = "";
+    if (data.action === "WAIT") {
+      summaryLine = isBuyPlan
+        ? `⏳ <strong>Hành động:</strong> Chưa vào ngay ở ${fmtPrice(data.current_price)}. Đợi giá <strong>lùi hồi xuống ${fmtPrice(data.entry)}</strong> rồi canh ${dirLabel} ➔ TP1 ${fmtPrice(data.tp1)} (SL ${fmtPrice(data.sl)}).`
+        : `⏳ <strong>Hành động:</strong> Chưa bán đuổi ở ${fmtPrice(data.current_price)}. Đợi giá <strong>nảy hồi lên ${fmtPrice(data.entry)}</strong> rồi canh ${dirLabel} ➔ TP1 ${fmtPrice(data.tp1)} (SL ${fmtPrice(data.sl)}).`;
+    } else {
+      summaryLine = `⚡ <strong>Hành động:</strong> Đang kích hoạt <strong>${data.action}</strong> quanh ${fmtPrice(data.entry)} ➔ Mục tiêu TP1 ${fmtPrice(data.tp1)} / TP2 ${fmtPrice(data.tp2)} (SL ${fmtPrice(data.sl)}).`;
+    }
+
+    const rows = [];
+    if (lastSweep) {
+      const isSsl = lastSweep.pool_type === "SSL";
+      rows.push(
+        isSsl
+          ? `<strong>• Quét đáy (SSL ${fmtPrice(lastSweep.swept_level)}):</strong> Giá vừa thọc xuống quét Stop-Loss phe Mua dưới đáy này; sau khi quét xong thường có nhịp bật hồi lên trước khi chạy tiếp.`
+          : `<strong>• Quét đỉnh (BSL ${fmtPrice(lastSweep.swept_level)}):</strong> Giá vừa chọc râu vượt đỉnh hút thanh khoản phe Bán rồi rút đầu, báo hiệu lực xả có thể xuất hiện.`
+      );
+    }
+    if (lastEv) {
+      const isBearEv = lastEv.direction === "bearish";
+      const evKind = lastEv.event === "BOS" ? "tiếp diễn xu hướng" : "tín hiệu đảo chiều cấu trúc";
+      rows.push(
+        `<strong>• ${lastEv.event} (${isBearEv ? "GIẢM" : "TĂNG"} tại ${fmtPrice(lastEv.price)}):</strong> Giá đóng nến phá ${isBearEv ? "đáy" : "đỉnh"} (${evKind}) ➔ ${isBearEv ? "Xu hướng chính thiên về GIẢM, ưu tiên chờ hồi cao để Sell." : "Xu hướng chính thiên về TĂNG, ưu tiên chờ hồi thấp để Buy."}`
+      );
+    }
+    if (lastFvg) {
+      const isBearFvg = lastFvg.type === "bearish";
+      rows.push(
+        `<strong>• FVG [${fmtPrice(lastFvg.bottom)} - ${fmtPrice(lastFvg.top)}]:</strong> Vùng khoảng trống mất cân bằng giá — giá rất hay ${isBearFvg ? "hồi lên lấp vùng này rồi mới giảm tiếp" : "lùi về lấp vùng này rồi mới bật tăng tiếp"}.`
+      );
+    }
+    if (lastSd) {
+      const isSup = lastSd.type === "supply";
+      rows.push(
+        `<strong>• ${lastSd.pattern.split(" ")[0]} (${lastSd.quality_score}đ) [${fmtPrice(lastSd.bottom)}-${fmtPrice(lastSd.top)}]:</strong> Vùng ${isSup ? "Cung (cản bán mạnh)" : "Cầu (đỡ mua mạnh)"} gần nhất. Chạm vùng này giá dễ ${isSup ? "bị đạp xuống" : "bật nảy lên"}.`
+      );
+    }
+    if (dr && dr.ote) {
+      rows.push(
+        `<strong>• ICT OTE [${fmtPrice(dr.ote.bottom)} - ${fmtPrice(dr.ote.top)}]:</strong> Vùng thoái lui vàng (Fibonacci 62%–79%) — chốt chặn sâu để đón hồi hoặc đặt Stop-Loss bảo vệ phía sau.`
+      );
+    }
+
+    explainEl.innerHTML = `
+      <div class="smc-explain-title">📖 DIỄN GIẢI DỄ HIỂU (ĐỌC NHANH)</div>
+      <div class="smc-explain-body">
+        <div class="smc-explain-action ${actionCls}">${summaryLine}</div>
+        ${rows.map(r => `<div class="smc-explain-row">${r}</div>`).join("")}
+      </div>
+    `;
+  }
 
   const ict = data.ict || {};
   setText("ictNyTime", ict.ny_time || "--:--");
@@ -1160,32 +1226,64 @@ function renderDashboard(data) {
 
 function getActiveRoadmapList(data) {
   if (data && Array.isArray(data.future_roadmap) && data.future_roadmap.length > 0) {
-    return data.future_roadmap;
+    const list = data.future_roadmap.map(item => ({ ...item }));
+    const poiIdx = list.findIndex(r => r.id === "ROADMAP_POI_RETEST");
+    if (poiIdx > 0) {
+      const [poiItem] = list.splice(poiIdx, 1);
+      list.unshift(poiItem);
+    }
+    if (data.action === "WAIT" && list[0] && list[0].id === "ROADMAP_POI_RETEST" && data.entry && data.tp1 && data.tp2) {
+      const isSellWait = Number(data.sl) > Number(data.entry);
+      list[0] = {
+        ...list[0],
+        tag: isSellWait ? "KÈO 1 • ĐÓN HỒI SELL LIMIT" : "KÈO 1 • ĐÓN HỒI BUY LIMIT",
+        direction: isSellWait ? "SELL" : "BUY",
+        trigger_type: isSellWait ? "HỒI SELL" : "HỒI BUY",
+        trigger_price: Number(data.entry),
+        entry: Number(data.entry),
+        sl: Number(data.sl),
+        tp1: Number(data.tp1),
+        tp2: Number(data.tp2),
+        rr: data.rr_ratio || list[0].rr,
+        path_points: [
+          { slot: 0, price: Number(data.current_price), label: "Hiện tại" },
+          { slot: 3.0, price: Number(data.entry), label: `${isSellWait ? "Hồi Sell" : "Hồi Buy"} $${data.entry}` },
+          { slot: 7.0, price: Number(data.tp1), label: `TP1 $${data.tp1}` },
+          { slot: 10.5, price: Number(data.tp2), label: `TP2 $${data.tp2}` }
+        ]
+      };
+    }
+    return list;
   }
   if (!data || !data.current_price) return [];
   const p = Number(data.current_price);
   const atr = Number(data.indicators?.atr || p * 0.004);
   const resH = Number((p + atr * 1.5).toFixed(2));
   const supL = Number((p - atr * 1.5).toFixed(2));
+  const ePrice = Number(data.entry || (p + atr * 0.8).toFixed(2));
+  const slPrice = Number(data.sl || (ePrice + atr * 1.2).toFixed(2));
+  const tp1Price = Number(data.tp1 || (ePrice - atr * 1.6).toFixed(2));
+  const tp2Price = Number(data.tp2 || (ePrice - atr * 2.5).toFixed(2));
+  const isSell = slPrice > ePrice;
   return [
     {
-      id: "ROADMAP_BOS_CONT",
-      tag: "KÈO 1 • PHÁ BOS",
-      title: `Tiếp diễn Giảm nếu phá BOS dưới $${supL}`,
-      direction: "SELL",
-      trigger_type: "BOS",
-      trigger_price: supL,
-      condition: `NẾU đóng nến phá BOS dưới $${supL} ➔ Canh hồi lên $${Number((supL + atr * 0.35).toFixed(2))} để BÁN tiếp diễn.`,
-      entry: Number((supL + atr * 0.35).toFixed(2)),
-      sl: Number((supL + atr * 1.7).toFixed(2)),
-      tp1: Number((supL - atr * 1.6).toFixed(2)),
-      tp2: Number((supL - atr * 2.8).toFixed(2)),
-      rr: 2.3,
+      id: "ROADMAP_POI_RETEST",
+      tag: isSell ? "KÈO 1 • ĐÓN HỒI SELL LIMIT" : "KÈO 1 • ĐÓN HỒI BUY LIMIT",
+      title: `Đợi giá hồi về Entry $${ePrice} rồi ${isSell ? "Bán xuống" : "Mua lên"}`,
+      direction: isSell ? "SELL" : "BUY",
+      trigger_type: isSell ? "HỒI SELL" : "HỒI BUY",
+      trigger_price: ePrice,
+      condition: `Không FOMO đuổi giá: Đợi giá hồi về $${ePrice} kèm nến từ chối ➔ Vào ${isSell ? "BÁN" : "MUA"} hướng về $${tp1Price} / $${tp2Price}.`,
+      entry: ePrice,
+      sl: slPrice,
+      tp1: tp1Price,
+      tp2: tp2Price,
+      rr: data.rr_ratio || 2.5,
       path_points: [
         { slot: 0, price: p, label: "Hiện tại" },
-        { slot: 2.5, price: supL, label: `Phá BOS $${supL}` },
-        { slot: 5.0, price: Number((supL + atr * 0.35).toFixed(2)), label: "Hồi Entry" },
-        { slot: 8.5, price: Number((supL - atr * 1.6).toFixed(2)), label: "TP1" }
+        { slot: 3.0, price: ePrice, label: `${isSell ? "Hồi Sell" : "Hồi Buy"} $${ePrice}` },
+        { slot: 7.0, price: tp1Price, label: `TP1 $${tp1Price}` },
+        { slot: 10.5, price: tp2Price, label: `TP2 $${tp2Price}` }
       ]
     },
     {
@@ -1483,7 +1581,7 @@ function drawInteractiveChart() {
         ctx.strokeStyle = col;
         ctx.lineWidth = 1.1;
         ctx.strokeRect(x1, y1, w, h);
-        drawAntiCollideTag(`${sd.pattern.split(" ")[0]} (${sd.quality_score}đ)`, (y1 + y2) / 2, width - padRight - 110, col, 0.88, "right");
+        drawAntiCollideTag(`${sd.pattern.split(" ")[0]} (${sd.quality_score}đ) [${sd.bottom}-${sd.top}]`, (y1 + y2) / 2, width - padRight - 155, col, 0.88, "right");
 
         interactiveHitBoxes.push({
           id: sd.id, x: x1, y: y1, w, h,
@@ -1555,7 +1653,7 @@ function drawInteractiveChart() {
         const col = isBull ? "#ffb74d" : "#f48fb1";
         ctx.fillStyle = isBull ? "rgba(255, 152, 0, 0.16)" : "rgba(233, 30, 99, 0.16)";
         ctx.fillRect(x1, y1, w, h);
-        drawAntiCollideTag(`FVG (${isBull ? "Bull" : "Bear"})`, (y1 + y2) / 2, width - padRight - 95, col, 0.85, "right");
+        drawAntiCollideTag(`${isBull ? "BULL" : "BEAR"} FVG [${fvg.bottom}-${fvg.top}]`, (y1 + y2) / 2, width - padRight - 150, col, 0.85, "right");
 
         interactiveHitBoxes.push({
           id: fvg.id, x: x1, y: y1, w, h,
@@ -1797,12 +1895,17 @@ function drawInteractiveChart() {
       }
     };
 
-    drawSignalLevel(currentData.entry, `ENTRY (R:R 1:${currentData.rr_ratio})`, "#00f0ff");
+    const isWaitSellSetup = Number(currentData.sl) > Number(currentData.entry);
+    const entryLineLabel =
+      currentData.action === "WAIT"
+        ? `${isWaitSellSetup ? "CHỜ HỒI SELL LIMIT" : "CHỜ HỒI BUY LIMIT"} (R:R 1:${currentData.rr_ratio})`
+        : `ENTRY ${currentData.action} (R:R 1:${currentData.rr_ratio})`;
+    drawSignalLevel(currentData.entry, entryLineLabel, "#00f0ff");
     drawSignalLevel(currentData.sl, "STOP", "#ef5350");
     drawSignalLevel(currentData.tp1, "TP1", "#26a69a");
     drawSignalLevel(currentData.tp2, "TARGET TP2", "#ffd700");
 
-    // FUTURE CONDITIONAL PROJECTION PATHS (BOS Continuation vs CHoCH Reversal)
+    // FUTURE CONDITIONAL PROJECTION PATHS (Primary Pullback-to-Entry vs CHoCH Reversal)
     if (showFutureRoadmap) {
       const roadmapList = getActiveRoadmapList(currentData);
       const lastBarX = xOfArrayIdx(total - 1);
@@ -1822,18 +1925,19 @@ function drawInteractiveChart() {
         ctx.font = "bold 9px 'Be Vietnam Pro', sans-serif";
         ctx.fillText("DỰ PHÓNG TƯƠNG LAI ➔", Math.min(lastBarX + 8, width - padRight - 135), padTop + 13);
 
-        // Choose either the selected card OR show the top 2 opposing branches (BOS & CHoCH)
+        // Choose either the selected card OR show the top 2 branches (Primary Pullback Entry & CHoCH Reversal)
         const activePaths = selectedRoadmapId
           ? roadmapList.filter(r => r.id === selectedRoadmapId)
           : roadmapList.slice(0, 2);
 
         activePaths.forEach(rm => {
           const isBuy = rm.direction === "BUY";
+          const isPrimaryPullback = rm.id === "ROADMAP_POI_RETEST";
           const pathCol = isBuy ? "#26a69a" : "#ef5350";
-          const glowCol = isBuy ? "rgba(38, 166, 154, 0.9)" : "rgba(239, 83, 80, 0.9)";
+          const glowCol = isBuy ? "rgba(38, 166, 154, 0.95)" : "rgba(239, 83, 80, 0.95)";
 
-          // Draw Trigger Line (BOS / CHoCH / SWEEP / POI threshold)
-          if (rm.trigger_price) {
+          // Draw Trigger Line (BOS / CHoCH / SWEEP threshold; skip duplicating ENTRY line for primary pullback)
+          if (rm.trigger_price && !isPrimaryPullback) {
             const yTrig = yOfPrice(rm.trigger_price);
             if (yTrig >= padTop + 10 && yTrig <= mainBottom - 10) {
               ctx.strokeStyle = isBuy ? "rgba(38, 166, 154, 0.55)" : "rgba(239, 83, 80, 0.55)";
@@ -1858,8 +1962,8 @@ function drawInteractiveChart() {
 
           if (pts.length >= 2) {
             ctx.strokeStyle = glowCol;
-            ctx.lineWidth = selectedRoadmapId ? 2.4 : 1.8;
-            ctx.setLineDash([5, 4]);
+            ctx.lineWidth = selectedRoadmapId || isPrimaryPullback ? 2.4 : 1.7;
+            ctx.setLineDash(isPrimaryPullback ? [6, 3] : [4, 4]);
             ctx.beginPath();
             ctx.moveTo(pts[0].x, pts[0].y);
             for (let k = 1; k < pts.length; k++) {
@@ -1872,7 +1976,7 @@ function drawInteractiveChart() {
             const pPrev = pts[pts.length - 2];
             const pLast = pts[pts.length - 1];
             const ang = Math.atan2(pLast.y - pPrev.y, pLast.x - pPrev.x);
-            const headLen = 8;
+            const headLen = 8.5;
             ctx.fillStyle = glowCol;
             ctx.beginPath();
             ctx.moveTo(pLast.x, pLast.y);
@@ -1883,24 +1987,36 @@ function drawInteractiveChart() {
 
             // Waypoint nodes & concise tags
             pts.slice(1).forEach((pt, idx) => {
-              ctx.fillStyle = "#0b0e14";
+              const isPullbackEntryNode = isPrimaryPullback && idx === 0;
+              if (isPullbackEntryNode) {
+                ctx.strokeStyle = "rgba(0, 240, 255, 0.85)";
+                ctx.lineWidth = 1.8;
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 6.5, 0, Math.PI * 2);
+                ctx.stroke();
+              }
+              ctx.fillStyle = isPullbackEntryNode ? "#00f0ff" : "#0b0e14";
               ctx.beginPath();
-              ctx.arc(pt.x, pt.y, 3.6, 0, Math.PI * 2);
+              ctx.arc(pt.x, pt.y, isPullbackEntryNode ? 4.2 : 3.6, 0, Math.PI * 2);
               ctx.fill();
-              ctx.strokeStyle = glowCol;
+              ctx.strokeStyle = isPullbackEntryNode ? "#ffffff" : glowCol;
               ctx.lineWidth = 1.5;
               ctx.stroke();
 
-              if (selectedRoadmapId || idx === 0 || idx === pts.length - 2) {
+              if (selectedRoadmapId || isPrimaryPullback || idx === 0 || idx === pts.length - 2) {
                 ctx.font = "bold 8.5px 'Be Vietnam Pro', sans-serif";
                 const lbl = `${pt.label}`;
                 const lw = ctx.measureText(lbl).width + 8;
                 const lx = Math.min(pt.x - lw / 2, width - padRight - lw - 4);
-                const ly = isBuy ? pt.y - 16 : pt.y + 6;
-                ctx.fillStyle = "rgba(11, 14, 20, 0.9)";
-                ctx.fillRect(lx, ly, lw, 12);
-                ctx.fillStyle = pathCol;
-                ctx.fillText(lbl, lx + 4, ly + 9);
+                const placeAbove = isPullbackEntryNode ? !isBuy : isBuy;
+                const ly = placeAbove ? pt.y - 18 : pt.y + 7;
+                ctx.fillStyle = "rgba(11, 14, 20, 0.92)";
+                ctx.fillRect(lx, ly, lw, 13);
+                ctx.strokeStyle = isPullbackEntryNode ? "#00f0ff" : pathCol;
+                ctx.lineWidth = 0.8;
+                ctx.strokeRect(lx, ly, lw, 13);
+                ctx.fillStyle = isPullbackEntryNode ? "#00f0ff" : pathCol;
+                ctx.fillText(lbl, lx + 4, ly + 9.5);
               }
             });
           }

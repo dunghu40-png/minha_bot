@@ -747,6 +747,62 @@ body {
   font-weight: 600;
 }
 
+.smc-explain-box {
+  margin-top: 0.55rem;
+  background: rgba(14, 22, 36, 0.92);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  border-left: 3px solid #00f0ff;
+  border-radius: 8px;
+  padding: 0.6rem 0.7rem;
+}
+
+.smc-explain-title {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #38bdf8;
+  letter-spacing: 0.03em;
+  margin-bottom: 0.42rem;
+}
+
+.smc-explain-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.36rem;
+  font-size: 0.73rem;
+  line-height: 1.42;
+  color: #cbd5e1;
+}
+
+.smc-explain-action {
+  background: rgba(0, 240, 255, 0.08);
+  border: 1px solid rgba(0, 240, 255, 0.25);
+  border-radius: 6px;
+  padding: 0.42rem 0.52rem;
+  color: #e0f2fe;
+  font-weight: 600;
+}
+
+.smc-explain-action.is-buy {
+  background: rgba(38, 166, 154, 0.12);
+  border-color: rgba(38, 166, 154, 0.35);
+  color: #a7f3d0;
+}
+
+.smc-explain-action.is-sell {
+  background: rgba(239, 83, 80, 0.12);
+  border-color: rgba(239, 83, 80, 0.35);
+  color: #fecaca;
+}
+
+.smc-explain-row {
+  padding-left: 0.35rem;
+  border-left: 2px solid rgba(148, 163, 184, 0.25);
+}
+
+.smc-explain-row strong {
+  color: #f8fafc;
+}
+
 /* AREA 4: Trading Scenarios */
 .signal-status-bar {
   background: rgba(56, 189, 248, 0.12);
