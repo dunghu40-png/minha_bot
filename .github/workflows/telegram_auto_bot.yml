@@ -19,9 +19,9 @@ on:
         required: false
         default: 'PAXG/USDT'
       timeframe:
-        description: 'Khung thời gian (5m, 15m, 1h, 4h, 1d)'
+        description: 'Khung thời gian, có thể nhiều khung cách nhau dấu phẩy (vd: 4h,1h,15m hoặc 5m, 15m, 1h, 4h, 1d)'
         required: false
-        default: '1h'
+        default: '4h,1h,15m'
       force_send:
         description: 'Bắt buộc gửi ngay (bỏ qua lọc trùng kèo)? (true / false)'
         required: false
@@ -35,7 +35,7 @@ concurrency:
 jobs:
   analyze_and_send_telegram:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
       - name: 1. Checkout mã nguồn
@@ -63,7 +63,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GOLD_SYMBOL: ${{ github.event.inputs.symbol || 'PAXG/USDT' }}
-          GOLD_TIMEFRAME: ${{ github.event.inputs.timeframe || '1h' }}
+          GOLD_TIMEFRAME: ${{ github.event.inputs.timeframe || '4h,1h,15m' }}
           EVENT_NAME: ${{ github.event_name }}
           SCHEDULE_EXPR: ${{ github.event.schedule }}
           INPUT_FORCE_SEND: ${{ github.event.inputs.force_send }}
@@ -71,6 +71,7 @@ jobs:
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             export MIN_CONFIDENCE="70"
             export FORCE_SEND="${INPUT_FORCE_SEND:-false}"
+            export FORCE_SEND_TF="${GOLD_TIMEFRAME}"
           elif [ "$SCHEDULE_EXPR" = "3 12-21 * * *" ]; then
             # Bản tin chốt nến đầu mỗi giờ Phiên Âu - Mỹ (19:03 tối -> 04:03 sáng VN)
             export MIN_CONFIDENCE="65"
