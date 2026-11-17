@@ -182,20 +182,27 @@ def run_once(
 
     conf = int(analysis.get("confidence", 0))
     sig_hash = f"{symbol}_{timeframe}_{analysis['action']}_{round(float(analysis['entry']) / 4)}"
+    state_key = f"{symbol}_{timeframe}"
 
     if not force_send and conf < min_confidence:
-        print(f"[-] Bỏ qua: Độ tin cậy ({conf}%) < mức tối thiểu ({min_confidence}%).")
+        print(f"[-] [{timeframe.upper()}] Bỏ qua: Độ tin cậy ({conf}%) < mức tối thiểu ({min_confidence}%).")
         return False
 
-    if not force_send and os.path.exists(STATE_FILE):
+    all_state = {}
+    if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE, "r", encoding="utf-8") as f:
-                last_state = json.load(f)
-            if last_state.get("sig_hash") == sig_hash:
-                print(f"[-] Kèo {sig_hash} đã được gửi trước đó, bỏ qua để chống spam.")
-                return False
+                loaded = json.load(f)
+            if isinstance(loaded, dict):
+                all_state = loaded.get("by_tf") if isinstance(loaded.get("by_tf"), dict) else {}
+                if not all_state and loaded.get("sig_hash"):
+                    all_state = {state_key: {"sig_hash": loaded["sig_hash"]}}
         except Exception:
-            pass
+            all_state = {}
+
+    if not force_send and all_state.get(state_key, {}).get("sig_hash") == sig_hash:
+        print(f"[-] [{timeframe.upper()}] Kèo {sig_hash} đã được gửi trước đó, bỏ qua để chống spam.")
+        return False
 
     chart_res = generate_annotated_chart_image(analysis, CHARTS_OUT_DIR, mode="smc")
     image_path = chart_res.get("file_path") or chart_res.get("filepath")
@@ -205,11 +212,37 @@ def run_once(
     print(f"[+] Đã gửi thành công Ảnh Chart + Tín hiệu {symbol} ({timeframe}) về Telegram!")
 
     try:
+        all_state[state_key] = {"sig_hash": sig_hash, "timestamp": int(time.time()), "entry": analysis["entry"]}
         with open(STATE_FILE, "w", encoding="utf-8") as f:
-            json.dump({"sig_hash": sig_hash, "timestamp": int(time.time()), "entry": analysis["entry"]}, f)
+            json.dump({"by_tf": all_state}, f)
     except Exception:
         pass
     return True
+
+
+def run_all_timeframes(
+    bot_token: str,
+    chat_id: str,
+    symbol: str,
+    timeframes: list,
+    min_confidence: int,
+    force_send: bool,
+    force_tfs: list
+) -> int:
+    """Quét lần lượt nhiều khung (H4 -> H1 -> M15). Khung nhỏ (<=15m) luôn đòi độ tin cậy >= 70% để tránh nhiễu."""
+    sent = 0
+    for idx, tf in enumerate(timeframes):
+        tf_min_conf = max(min_confidence, 70) if tf in ("1m", "3m", "5m", "15m") else min_confidence
+        tf_force = force_send and (len(timeframes) == 1 or tf in force_tfs)
+        try:
+            if run_once(bot_token, chat_id, symbol, tf, tf_min_conf, tf_force):
+                sent += 1
+                if idx < len(timeframes) - 1:
+                    time.sleep(2)
+        except Exception as e:
+            print(f"[!] Lỗi khung {tf}: {e}")
+    print(f"[=] Hoàn tất quét {len(timeframes)} khung ({', '.join(timeframes)}) — đã gửi {sent} tin.")
+    return sent
 
 
 def auto_detect_chat_id(bot_token: str) -> str:
@@ -232,7 +265,15 @@ if __name__ == "__main__":
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
     chat = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
     sym = os.environ.get("GOLD_SYMBOL", "PAXG/USDT").strip()
-    tf = os.environ.get("GOLD_TIMEFRAME", "1h").strip()
+    tf_order = {"1d": 0, "4h": 1, "1h": 2, "15m": 3, "5m": 4}
+    tf_raw = os.environ.get("GOLD_TIMEFRAME", "4h,1h,15m")
+    tfs = []
+    for t in tf_raw.split(","):
+        t = t.strip().lower()
+        if t and t not in tfs:
+            tfs.append(t)
+    tfs = sorted(tfs, key=lambda x: tf_order.get(x, 9)) or ["1h"]
+    force_tfs = [t.strip().lower() for t in os.environ.get("FORCE_SEND_TF", "1h").split(",") if t.strip()]
     min_conf = int(os.environ.get("MIN_CONFIDENCE", "70"))
     force = os.environ.get("FORCE_SEND", "false").lower() == "true"
     loop_sec = int(os.environ.get("LOOP_SECONDS", "0"))
@@ -250,9 +291,9 @@ if __name__ == "__main__":
         print(f"🚀 Khởi động Bot Telegram chạy ngầm tự động mỗi {loop_sec} giây...")
         while True:
             try:
-                run_once(token, chat, sym, tf, min_conf, force)
+                run_all_timeframes(token, chat, sym, tfs, min_conf, force, force_tfs)
             except Exception as e:
                 print(f"[!] Lỗi chu kỳ quét: {e}")
             time.sleep(loop_sec)
     else:
-        run_once(token, chat, sym, tf, min_conf, force)
+        run_all_timeframes(token, chat, sym, tfs, min_conf, force, force_tfs)
